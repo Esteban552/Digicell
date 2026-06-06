@@ -1,0 +1,6 @@
+{
+  "name": "Digicell POS",
+  "description": "Sistema completo de administración de órdenes de reparación y punto de venta para talleres técnicos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
