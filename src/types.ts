@@ -37,6 +37,7 @@ export interface CartItem {
   name: string;
   qty: number;
   price: number;
+  productId?: number;
 }
 
 export interface LogEntry {

@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import type { Session } from '@supabase/supabase-js';
 
 // Modular View Imports
 import Sidebar from './components/Sidebar';
@@ -17,35 +18,97 @@ import SettingsView from './components/SettingsView';
 import Toast from './components/Toast';
 
 // Data & Types Imports
-import { 
-  INITIAL_REPAIRS, 
-  INITIAL_CART, 
-  INITIAL_LOGS, 
-  INITIAL_CASH_MOVEMENTS 
-} from './data';
-import { 
-  ActiveView, 
-  RepairOrder, 
-  CartItem, 
-  LogEntry, 
-  CashRegistryMovement 
-} from './types';
+import { INITIAL_CART } from './data';
+import { supabase } from './lib/supabase';
+import { useRepairOrders } from './hooks/useRepairOrders';
+import { useCashMovements } from './hooks/useCashMovements';
+import { useActivityLogs } from './hooks/useActivityLogs';
+import { useSettings } from './hooks/useSettings';
+import { useProducts } from './hooks/useProducts';
+import { ActiveView, RepairOrder, CartItem } from './types';
 
 export default function App() {
-  // Session authentication state (initial prefilled J. Cashier for quick preview)
-  const [user, setUser] = useState<string | null>('J. Cashier');
-  
+  // Supabase Auth session
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        setAuthLoading(false);
+      }
+    }, 4000);
+
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        if (!settled) setSession(session);
+      })
+      .catch(() => {
+        if (!settled) setSession(null);
+      })
+      .finally(() => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          setAuthLoading(false);
+        }
+      });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => {
+      settled = true;
+      clearTimeout(timer);
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const userName = session?.user?.user_metadata?.display_name ?? session?.user?.email?.split('@')[0] ?? 'Invitado';
+  const userId = session?.user?.id ?? null;
+
   // Active navigation view state
   const [currentView, setCurrentView] = useState<ActiveView>('dashboard');
 
+  // Navigate based on auth state
+  useEffect(() => {
+    if (authLoading) return;
+    setCurrentView(session ? 'dashboard' : 'login');
+  }, [session, authLoading]);
+
   // Shared application "database" states
-  const [repairs, setRepairs] = useState<RepairOrder[]>(INITIAL_REPAIRS);
+  const {
+    data: dbRepairs,
+    loading: repairsLoading,
+    create: createRepairInDb,
+    update: syncRepairToDb,
+    remove: removeRepairFromDb,
+  } = useRepairOrders();
+
+  // Local mirror for instant form editing — syncs from DB on load
+  const [repairs, setRepairs] = useState<RepairOrder[]>([]);
+  useEffect(() => {
+    if (!repairsLoading) setRepairs(dbRepairs);
+  }, [dbRepairs, repairsLoading]);
+
+  const { data: logs, refetch: refetchLogs } = useActivityLogs();
+  const { add: addCashMovement } = useCashMovements();
+  const { data: settings, update: updateSetting } = useSettings();
+  const { data: products, refetch: refetchProducts } = useProducts();
   const [cart, setCart] = useState<CartItem[]>(INITIAL_CART);
-  const [logs, setLogs] = useState<LogEntry[]>(INITIAL_LOGS);
-  const [cashMovements, setCashMovements] = useState<CashRegistryMovement[]>(INITIAL_CASH_MOVEMENTS);
 
   // Active loaded repair inside Order Intake Form
-  const [selectedRepairId, setSelectedRepairId] = useState<string>('10041');
+  const [selectedRepairId, setSelectedRepairId] = useState<string>('');
+  // Set initial selected repair from DB data once loaded
+  useEffect(() => {
+    if (repairs.length > 0 && !selectedRepairId) {
+      setSelectedRepairId(repairs[0].id);
+    }
+  }, [repairs, selectedRepairId]);
 
   // Search parameters
   const [searchQuery, setSearchQuery] = useState('');
@@ -63,17 +126,10 @@ export default function App() {
     setToastMessage({ title, desc, type });
   }, []);
 
-  // Sync currentView if User is logged out
-  useEffect(() => {
-    if (!user) {
-      setCurrentView('login');
-    }
-  }, [user]);
-
   // Global Keyboard listener shortcuts (F5 for Checkout, F8 for Search)
   useEffect(() => {
     const handleGlobalShortcuts = (e: KeyboardEvent) => {
-      if (!user) return;
+      if (!session) return;
       
       if (e.key === 'F8') {
         e.preventDefault();
@@ -84,68 +140,37 @@ export default function App() {
 
     window.addEventListener('keydown', handleGlobalShortcuts);
     return () => window.removeEventListener('keydown', handleGlobalShortcuts);
-  }, [user, showToast]);
-
-  // Log in user
-  const handleLoginSuccess = (username: string) => {
-    setUser(username);
-    setCurrentView('dashboard');
-    showToast('Sesión Iniciada', `Bienvenido al sistema Digicell, ${username}.`, 'success');
-  };
+  }, [session, showToast]);
 
   // Log out user
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (confirm('¿Seguro que deseas salir y cerrar sesión?')) {
-      setUser(null);
-      setCurrentView('login');
+      await supabase.auth.signOut();
       setCart([]);
       showToast('Sesión Cerrada', 'Has desconectado de la terminal actual con éxito.', 'info');
     }
   };
 
   // Create a brand new vacant repair order
-  const handleCreateNewRepair = () => {
-    const nextNumericId = String(Math.max(...repairs.map(r => Number(r.id) || 10000)) + 1);
-    const newOrder: RepairOrder = {
-      id: nextNumericId,
-      clientName: '',
-      clientPhone: '',
-      clientEmail: '',
-      deviceBrand: 'Apple',
-      deviceModel: '',
-      deviceSerial: '',
-      devicePassword: '',
-      deviceColor: '',
-      powersOn: 'Yes',
-      batteryPercent: '',
-      chargerLeft: false,
-      coverLeft: false,
-      receivingCondition: '',
-      problemReported: '',
-      status: 'in_review',
-      technician: 'Unassigned',
-      deliveryDate: new Date().toISOString().split('T')[0],
-      warrantyEnd: new Date(Date.now() + 90 * 24 * 3600 * 1000).toISOString().split('T')[0],
-      totalCost: 0,
-      advancePaid: 0,
-      remainingBalance: 0,
-      footnote: 'Garantía de 30 días en piezas reemplazadas. No nos hacemos responsables por equipos olvidados después de 60 días.',
-      createdAt: new Date().toISOString()
-    };
-
+  const handleCreateNewRepair = async () => {
+    const newOrder = await createRepairInDb();
+    if (!newOrder) {
+      showToast('Error', 'No se pudo crear la orden de reparación.', 'error');
+      return;
+    }
     setRepairs(prev => [newOrder, ...prev]);
-    setSelectedRepairId(nextNumericId);
+    setSelectedRepairId(newOrder.id);
     setCurrentView('repairs');
-    showToast('Nueva Orden', `Se inició folio #${nextNumericId} para edición.`, 'info');
+    showToast('Nueva Orden', `Se inició folio #${newOrder.id} para edición.`, 'info');
   };
 
-  // Handle updates inside repair forms
+  // Handle updates inside repair forms (local-only for instant response)
   const handleUpdateRepair = (id: string, updatedFields: Partial<RepairOrder>) => {
     setRepairs(prev => prev.map(r => r.id === id ? { ...r, ...updatedFields } : r));
   };
 
-  // Finalize/Save the repair order, registering progress
-  const handleSaveRepairOrder = (id: string) => {
+  // Finalize/Save the repair order, syncing to Supabase
+  const handleSaveRepairOrder = async (id: string) => {
     const orderRef = repairs.find(r => r.id === id);
     if (!orderRef) return;
 
@@ -154,27 +179,17 @@ export default function App() {
       return;
     }
 
-    // Accumulate Log registers if there was an advance paid that we want to track
-    if (orderRef.advancePaid > 0) {
-      // Avoid duplicate logs if possible, or just generate a new log track
-      const advanceLog: LogEntry = {
-        id: 'log_adv_' + Date.now(),
-        time: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
-        type: 'Repair Advance',
-        description: `Ticket #R-${orderRef.id}: ${orderRef.deviceBrand} ${orderRef.deviceModel} Deposit`,
-        amount: orderRef.advancePaid,
-        status: 'Advance'
-      };
-      setLogs(prev => [advanceLog, ...prev]);
-    }
-
+    await syncRepairToDb(id, orderRef);
+    refetchLogs();
     showToast('¡Guardado Perfecto!', `Orden de servicio #${orderRef.id} actualizada correctamente.`, 'success');
   };
 
   // Perform delete on selected repair
-  const handleDeleteCurrentRepair = () => {
+  const handleDeleteCurrentRepair = async () => {
     if (confirm(`¿Seguro que deseas eliminar permanentemente el folio #${selectedRepairId}?`)) {
+      await removeRepairFromDb(selectedRepairId);
       setRepairs(prev => prev.filter(r => r.id !== selectedRepairId));
+      refetchLogs();
       showToast('Registro eliminado', `Se descartó el folio #${selectedRepairId} del registro.`, 'error');
       
       // Load next available or make a new one
@@ -212,51 +227,72 @@ export default function App() {
   };
 
   // Complete point-of-sale transaction
-  const handleCompletePOSCheckout = (cash: number, card: number, usd: number) => {
+  const handleCompletePOSCheckout = async (cash: number, card: number, usd: number) => {
     const subtotalCost = cart.reduce((acc, c) => acc + (c.price * c.qty), 0);
     const taxCharge = subtotalCost * 0.16;
     const totalCost = subtotalCost + taxCharge;
 
     const itemsDesc = cart.map(c => `${c.qty}x ${c.name}`).join(', ');
+    const description = itemsDesc.length > 55 ? itemsDesc.slice(0, 52) + '...' : itemsDesc;
 
-    // Register sale log
-    const saleLog: LogEntry = {
-      id: 'log_pos_' + Date.now(),
-      time: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
-      type: 'POS Sale',
-      description: itemsDesc.length > 55 ? itemsDesc.slice(0, 52) + '...' : itemsDesc,
-      amount: totalCost,
-      status: 'Paid'
-    };
+    const { data: sale, error: saleErr } = await supabase
+      .from('sales')
+      .insert({
+        description,
+        cash_amount: cash,
+        card_amount: card,
+        usd_amount: usd,
+        subtotal: subtotalCost,
+        tax: taxCharge,
+        total: totalCost,
+        created_by: userId,
+      })
+      .select()
+      .single();
 
-    setLogs(prev => [saleLog, ...prev]);
-    setCart([]); // Clear cart
-    showToast('Venta Exitosa', `Venta procesada correctamente por $${totalCost.toFixed(2)}.`, 'success');
+    if (saleErr || !sale) {
+      showToast('Error', 'No se pudo procesar la venta.', 'error');
+      return;
+    }
+
+    const { error: itemsErr } = await supabase.from('sale_items').insert(
+      cart.map(c => ({
+        sale_id: sale.id,
+        product_name: c.name,
+        qty: c.qty,
+        price: c.price,
+      }))
+    );
+
+    if (itemsErr) {
+      showToast('Error', 'Venta registrada pero fallaron los detalles.', 'error');
+    } else {
+      // Deduct stock for cart items that have a productId
+      const stockDeductions = cart
+        .filter(c => c.productId)
+        .map(c => {
+          const product = products.find(p => p.id === c.productId);
+          if (!product) return Promise.resolve();
+          const newStock = Math.max(0, product.stock - c.qty);
+          return supabase.from('products').update({ stock: newStock }).eq('id', c.productId!);
+        });
+      await Promise.all(stockDeductions);
+      showToast('Venta Exitosa', `Venta procesada correctamente por $${totalCost.toFixed(2)}.`, 'success');
+    }
+
+    setCart([]);
+    refetchLogs();
+    refetchProducts();
   };
 
   // Register cash registry movement
-  const handleRegisterCashMovement = (type: 'in' | 'out', amount: number, note: string) => {
-    const cleanAmount = type === 'out' ? -amount : amount;
-    
-    const cashEntry: CashRegistryMovement = {
-      id: 'move_' + Date.now(),
-      type,
-      amount: amount,
-      note,
-      time: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
-    };
-
-    const sysLog: LogEntry = {
-      id: 'log_cash_' + Date.now(),
-      time: cashEntry.time,
-      type: 'Cash Movement',
-      description: note.length > 55 ? note.slice(0, 52) + '...' : note,
-      amount: cleanAmount,
-      status: type === 'out' ? 'Outflow' : 'Paid'
-    };
-
-    setCashMovements(prev => [cashEntry, ...prev]);
-    setLogs(prev => [sysLog, ...prev]);
+  const handleRegisterCashMovement = async (type: 'in' | 'out', amount: number, note: string) => {
+    const ok = await addCashMovement(type, amount, note);
+    if (!ok) {
+      showToast('Error', 'No se pudo registrar el movimiento de caja.', 'error');
+      return;
+    }
+    refetchLogs();
     showToast('Flujo registrado', `Movimiento de caja por $${amount.toFixed(2)} asentado en reporte.`, 'success');
   };
 
@@ -297,6 +333,14 @@ export default function App() {
     };
   }, [repairs]);
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface-bright">
+        <span className="animate-spin material-symbols-outlined text-primary text-4xl">progress_activity</span>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-surface-bright flex antialiased select-none font-sans">
       
@@ -305,19 +349,18 @@ export default function App() {
         activeView={currentView}
         onViewChange={setCurrentView}
         onCreateNewRepair={handleCreateNewRepair}
-        user={user}
         onLogout={handleLogout}
       />
 
       {/* Main interactive workspace panels wrapper */}
-      <div className={`flex-1 flex flex-col ${user ? 'ml-64' : 'ml-0'}`}>
+      <div className={`flex-1 flex flex-col ${session ? 'ml-64' : 'ml-0'}`}>
         
         {/* Top bar header */}
         <Header
           activeView={currentView}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
-          user={user}
+          user={userName}
           onOpenSearchModal={() => setSearchModalOpen(true)}
           onCreateNewRepair={handleCreateNewRepair}
           onDeleteCurrentRepair={handleDeleteCurrentRepair}
@@ -326,11 +369,11 @@ export default function App() {
         />
 
         {/* Dynamic page routes rendering canvas */}
-        <main className={`flex-1 p-6 ${user ? 'mt-16' : 'mt-0'} overflow-y-auto bg-surface-container-lowest h-[calc(100vh-4rem)]`}>
+        <main className={`flex-1 p-6 ${session ? 'mt-16' : 'mt-0'} overflow-y-auto bg-surface-container-lowest h-[calc(100vh-4rem)]`}>
           <div className="max-w-7xl mx-auto h-full flex flex-col">
             
             {currentView === 'login' && (
-              <LoginView onLoginSuccess={handleLoginSuccess} />
+              <LoginView />
             )}
 
             {currentView === 'dashboard' && (
@@ -351,6 +394,8 @@ export default function App() {
                 onCompleteCheckout={handleCompletePOSCheckout}
                 onRegisterCashMovement={handleRegisterCashMovement}
                 showToast={showToast}
+                products={products}
+                onRefetchProducts={refetchProducts}
               />
             )}
 
@@ -378,7 +423,7 @@ export default function App() {
             )}
 
             {currentView === 'settings' && (
-              <SettingsView user={user} showToast={showToast} />
+              <SettingsView user={userName} showToast={showToast} settings={settings} updateSetting={updateSetting} />
             )}
 
           </div>

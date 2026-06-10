@@ -29,10 +29,10 @@ export default function DashboardView({
       {/* Upper Brand Greetings */}
       <div className="select-none">
         <h2 className="text-3xl font-bold text-on-surface tracking-tight font-sans">
-          Welcome Back, Tech.
+          Bienvenido de vuelta, Técnico.
         </h2>
         <p className="text-sm font-sans text-on-surface-variant mt-1.5 font-medium">
-          What would you like to do today?
+          ¿Qué te gustaría hacer hoy?
         </p>
       </div>
 
@@ -55,7 +55,7 @@ export default function DashboardView({
               Punto de Venta
             </h3>
             <p className="text-xs font-sans text-on-surface-variant max-w-md leading-relaxed font-medium">
-              Access the checkout register to process accessory sales, finalize repair tickets, and manage daily cash flow seamlessly.
+              Accede al registro de ventas para procesar ventas de accesorios, finalizar tickets de reparación y gestionar el flujo de caja diario.
             </p>
           </div>
           
@@ -81,17 +81,17 @@ export default function DashboardView({
               Reparaciones
             </h3>
             <p className="text-xs font-sans text-on-surface-variant leading-relaxed font-medium">
-              View active tickets, update diagnostic statuses, and log new intake devices or orders.
+              Ver tickets activos, actualizar estados de diagnóstico y registrar nuevos dispositivos u órdenes de recepción.
             </p>
           </div>
           
           <div className="mt-4 flex flex-col gap-2.5">
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-secondary-container text-on-secondary-container text-[9px] font-bold tracking-wider font-sans">
-                {urgentCount} URGENT
+                {urgentCount} URGENTE
               </span>
               <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant text-[9px] font-bold tracking-wider font-sans">
-                {inProgressCount} IN PROGRESS
+                {inProgressCount} EN PROGRESO
               </span>
             </div>
             <div className="flex items-center text-primary font-sans text-xs font-bold group-hover:translate-x-2 transition-transform duration-200">
@@ -114,7 +114,7 @@ export default function DashboardView({
               Reportes
             </h3>
             <p className="text-xs font-sans text-on-surface-variant leading-relaxed font-medium">
-              End of day summaries, inventory counters, daily cash flow audits, and technician analytics.
+              Resúmenes de fin de día, contadores de inventario, auditorías de flujo de caja y análisis técnicos.
             </p>
           </div>
           
@@ -150,7 +150,7 @@ export default function DashboardView({
         <div className="bg-white p-5 rounded-lg border border-outline-variant flex items-center justify-between shadow-sm">
           <div>
             <p className="text-[10px] font-sans font-bold text-on-surface-variant uppercase tracking-wider">
-              Today's Sales
+              Ventas del Día
             </p>
             <p className="text-lg font-bold text-on-surface font-sans leading-tight mt-1">
               ${totalsSalesVal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -164,7 +164,7 @@ export default function DashboardView({
         <div className="bg-white p-5 rounded-lg border border-outline-variant flex items-center justify-between shadow-sm">
           <div>
             <p className="text-[10px] font-sans font-bold text-on-surface-variant uppercase tracking-wider">
-              Completed Repairs
+              Reparaciones Completadas
             </p>
             <p className="text-lg font-bold text-on-surface font-sans leading-tight mt-1">
               {completedRepairsCount}

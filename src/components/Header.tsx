@@ -58,7 +58,7 @@ export default function Header({
             className="flex items-center gap-1.5 px-3.5 py-1.5 border border-outline text-on-surface text-xs font-semibold rounded hover:bg-slate-50 transition-colors cursor-pointer outline-none shrink-0"
           >
             <span className="material-symbols-outlined text-[16px]">print</span>
-            Reimprimir Receipt
+            Reimprimir Comprobante
           </button>
           
           <button
@@ -88,10 +88,10 @@ export default function Header({
               }}
               placeholder={
                 activeView === 'pos'
-                  ? "Search products..."
+                  ? "Buscar productos..."
                   : activeView === 'reports'
-                  ? "Search transaction or description..."
-                  : "Search repairs, model, customer..."
+                  ? "Buscar transacción o descripción..."
+                  : "Buscar reparaciones, modelo, cliente..."
               }
               className="w-full h-full pl-10 pr-4 bg-transparent border-none text-sm text-on-surface focus:outline-none focus:ring-0 placeholder-on-surface-variant font-sans"
             />

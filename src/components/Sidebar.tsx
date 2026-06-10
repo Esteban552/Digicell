@@ -10,7 +10,6 @@ interface SidebarProps {
   activeView: ActiveView;
   onViewChange: (view: ActiveView) => void;
   onCreateNewRepair: () => void;
-  user: string | null;
   onLogout: () => void;
 }
 
@@ -18,16 +17,15 @@ export default function Sidebar({
   activeView,
   onViewChange,
   onCreateNewRepair,
-  user,
   onLogout
 }: SidebarProps) {
   if (activeView === 'login') return null;
 
   const navItems = [
-    { view: 'dashboard' as ActiveView, label: 'Dashboard', icon: 'dashboard' },
+    { view: 'dashboard' as ActiveView, label: 'Panel', icon: 'dashboard' },
     { view: 'pos' as ActiveView, label: 'POS', icon: 'point_of_sale' },
-    { view: 'repairs' as ActiveView, label: 'Repairs', icon: 'build' },
-    { view: 'reports' as ActiveView, label: 'Reports', icon: 'analytics' },
+    { view: 'repairs' as ActiveView, label: 'Reparaciones', icon: 'build' },
+    { view: 'reports' as ActiveView, label: 'Reportes', icon: 'analytics' },
   ];
 
   return (
@@ -39,7 +37,7 @@ export default function Sidebar({
         </div>
         <div>
           <h1 className="text-[20px] leading-tight font-headline-md font-bold text-primary tracking-tight">Digicell</h1>
-          <p className="text-xs font-medium text-on-surface-variant font-sans tracking-wide">Repair POS</p>
+          <p className="text-xs font-medium text-on-surface-variant font-sans tracking-wide">Sistema POS</p>
         </div>
       </div>
 
@@ -49,7 +47,7 @@ export default function Sidebar({
         className="w-full bg-primary hover:bg-primary-container text-white py-2.5 px-4 rounded-md font-sans text-sm font-semibold transition-colors duration-200 shadow-sm flex items-center justify-center gap-2 mb-6 outline-none hover:shadow-md cursor-pointer"
       >
         <span className="material-symbols-outlined text-[18px]">add</span>
-        New Repair
+        Nueva Reparación
       </button>
 
       {/* Navigation tabs */}
@@ -86,7 +84,7 @@ export default function Sidebar({
           }`}
         >
           <span className="material-symbols-outlined">settings</span>
-          <span className="text-sm font-sans font-medium">Settings</span>
+          <span className="text-sm font-sans font-medium">Configuración</span>
         </button>
         
         <button
@@ -94,7 +92,7 @@ export default function Sidebar({
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-error hover:bg-error-container hover:text-on-error-container transition-all duration-200 text-left cursor-pointer outline-none hover:scale-[0.98]"
         >
           <span className="material-symbols-outlined">logout</span>
-          <span className="text-sm font-sans font-medium">Logout</span>
+          <span className="text-sm font-sans font-medium">Cerrar Sesión</span>
         </button>
       </div>
     </aside>

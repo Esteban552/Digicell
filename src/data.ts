@@ -115,19 +115,19 @@ export const INITIAL_REPAIRS: RepairOrder[] = [
 export const INITIAL_CART: CartItem[] = [
   {
     id: 'p1',
-    name: 'iPhone 13 Pro Max Screen Replacement',
+    name: 'Pantalla iPhone 13 Pro Max',
     qty: 1,
     price: 185.00
   },
   {
     id: 'p2',
-    name: 'Tempered Glass Protector - Universal',
+    name: 'Protector Cristal Templado Universal',
     qty: 2,
     price: 15.00
   },
   {
     id: 'p3',
-    name: 'USB-C Fast Charging Cable 2M',
+    name: 'Cable USB-C Carga Rápida 2M',
     qty: 1,
     price: 25.00
   }
@@ -138,7 +138,7 @@ export const INITIAL_LOGS: LogEntry[] = [
     id: 'log1',
     time: '09:15 AM',
     type: 'Repair Advance',
-    description: 'Ticket #R-4029: iPhone 13 Screen Replacement Deposit',
+    description: 'Ticket #R-4029: Depósito cambio de pantalla iPhone 13',
     amount: 80.00,
     status: 'Advance'
   },
@@ -146,7 +146,7 @@ export const INITIAL_LOGS: LogEntry[] = [
     id: 'log2',
     time: '09:42 AM',
     type: 'POS Sale',
-    description: '2x Tempered Glass, 1x USB-C Cable',
+    description: '2x Cristal Templado, 1x Cable USB-C',
     amount: 45.50,
     status: 'Paid'
   },
@@ -154,7 +154,7 @@ export const INITIAL_LOGS: LogEntry[] = [
     id: 'log3',
     time: '10:05 AM',
     type: 'Cash Movement',
-    description: 'Petty Cash withdrawal for supplies',
+    description: 'Retiro de efectivo para insumos',
     amount: -20.00,
     status: 'Outflow'
   },
@@ -162,7 +162,7 @@ export const INITIAL_LOGS: LogEntry[] = [
     id: 'log4',
     time: '11:30 AM',
     type: 'Repair Payment',
-    description: 'Ticket #R-4015: Final Payment Samsung Battery',
+    description: 'Ticket #R-4015: Pago Final Batería Samsung',
     amount: 65.00,
     status: 'Paid'
   },
@@ -170,7 +170,7 @@ export const INITIAL_LOGS: LogEntry[] = [
     id: 'log5',
     time: '01:15 PM',
     type: 'POS Sale',
-    description: '1x Bluetooth Earbuds (Sony)',
+    description: '1x Audífonos Bluetooth (Sony)',
     amount: 120.00,
     status: 'Paid'
   }
@@ -181,25 +181,25 @@ export const INITIAL_CASH_MOVEMENTS: CashRegistryMovement[] = [
     id: 'm1',
     type: 'out',
     amount: 20.00,
-    note: 'Petty cash withdrawal for cleaning supplies',
+    note: 'Retiro de efectivo para insumos de limpieza',
     time: '10:05 AM'
   },
   {
     id: 'm2',
     type: 'in',
     amount: 100.00,
-    note: 'Opening register cash fund',
+    note: 'Fondo inicial de caja',
     time: '08:00 AM'
   }
 ];
 
 export const PRESET_INVENTORY = [
-  { id: 'i1', name: 'iPhone 13 Pro Max Screen Replacement', price: 185.00, category: 'Pantallas' },
-  { id: 'i2', name: 'Tempered Glass Protector - Universal', price: 15.00, category: 'Accesorios' },
-  { id: 'i3', name: 'USB-C Fast Charging Cable 2M', price: 25.00, category: 'Cables' },
-  { id: 'i4', name: 'Bluetooth Earbuds (Sony)', price: 120.00, category: 'Audio' },
-  { id: 'i5', name: 'Samsung Galaxy S21 Screen Replacement', price: 165.00, category: 'Pantallas' },
-  { id: 'i6', name: 'iPhone Battery (X/11/12/13 Series)', price: 60.00, category: 'Baterías' },
-  { id: 'i7', name: 'Micro SD Card 128GB Kingston', price: 19.99, category: 'Almacenamiento' },
-  { id: 'i8', name: 'Heavy Duty Armor Case - iPhone 14/15', price: 35.00, category: 'Accesorios' }
+  { id: 'i1', name: 'Pantalla iPhone 13 Pro Max', price: 185.00, category: 'Pantallas' },
+  { id: 'i2', name: 'Protector Cristal Templado Universal', price: 15.00, category: 'Accesorios' },
+  { id: 'i3', name: 'Cable USB-C Carga Rápida 2M', price: 25.00, category: 'Cables' },
+  { id: 'i4', name: 'Audífonos Bluetooth (Sony)', price: 120.00, category: 'Audio' },
+  { id: 'i5', name: 'Pantalla Samsung Galaxy S21', price: 165.00, category: 'Pantallas' },
+  { id: 'i6', name: 'Batería iPhone (X/11/12/13)', price: 60.00, category: 'Baterías' },
+  { id: 'i7', name: 'Micro SD 128GB Kingston', price: 19.99, category: 'Almacenamiento' },
+  { id: 'i8', name: 'Funda Reforzada iPhone 14/15', price: 35.00, category: 'Accesorios' }
 ];

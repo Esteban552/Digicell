@@ -1,90 +1,170 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
+import React, { useState } from "react";
+import { supabase } from "../lib/supabase";
 
-import React, { useState } from 'react';
+export default function LoginView() {
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-interface LoginViewProps {
-  onLoginSuccess: (username: string) => void;
-}
-
-export default function LoginView({ onLoginSuccess }: LoginViewProps) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(true);
-  const [errorMsg, setErrorMsg] = useState('');
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) {
-      setErrorMsg('Por favor introduce tu nombre de usuario o negocio.');
+    setErrorMsg("");
+    setSuccessMsg("");
+
+    // Validaciones iniciales
+    if (!email.trim()) {
+      setErrorMsg("El correo electrónico es obligatorio.");
       return;
     }
     if (!password) {
-      setErrorMsg('La contraseña es necesaria.');
+      setErrorMsg("La contraseña es obligatoria.");
       return;
     }
-    
-    // Accept any credentials for interactive demo, but resolve username
-    onLoginSuccess(username.trim());
+    if (mode === "register" && !displayName.trim()) {
+      setErrorMsg("El nombre es obligatorio.");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      if (mode === "login") {
+        // --- PROCESO DE INICIO DE SESIÓN ---
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) {
+          setErrorMsg(
+            error.message === "Invalid login credentials"
+              ? "Credenciales inválidas. Verificá tu correo y contraseña."
+              : error.message,
+          );
+        } else {
+          // ¡ÉXITO! El usuario inició sesión correctamente
+          console.log("¡Inicio de sesión exitoso!", data);
+          // Aquí puedes agregar un redireccionamiento si no usas un listener global, ej: router.push('/dashboard')
+        }
+      } else {
+        // --- PROCESO DE REGISTRO ---
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { display_name: displayName.trim() } },
+        });
+
+        if (error) {
+          setErrorMsg(error.message);
+        } else {
+          setSuccessMsg(
+            "Cuenta creada. Revisá tu email para confirmar (si aplica) o ya podés iniciar sesión.",
+          );
+          setMode("login");
+          // Limpiamos los campos por comodidad del usuario
+          setDisplayName("");
+          setPassword("");
+        }
+      }
+    } catch (err: any) {
+      // Captura errores catastróficos o de red inesperados
+      setErrorMsg("Ocurrió un error inesperado al conectar con el servidor.");
+      console.error("Error del sistema:", err);
+    } finally {
+      // Este bloque SIEMPRE se ejecuta al final, apagando el cargando pase lo que pase
+      setSubmitting(false);
+    }
   };
 
   return (
     <div className="min-h-screen w-screen flex flex-col items-center justify-center bg-surface-bright font-sans p-6 select-none">
       <div className="w-full max-w-md">
-        
-        {/* Core Card Container */}
         <div className="bg-white rounded-xl border border-surface-variant p-10 shadow-sm flex flex-col gap-6">
-          
-          {/* Logo Header */}
           <div className="text-center mb-2">
-            <h1 className="text-3xl font-bold text-primary tracking-tight font-sans">Digicell</h1>
-            <p className="text-sm font-sans text-on-surface-variant mt-2 font-medium">Repair POS System</p>
+            <h1 className="text-3xl font-bold text-primary tracking-tight font-sans">
+              Digicell
+            </h1>
+            <p className="text-sm font-sans text-on-surface-variant mt-2 font-medium">
+              Sistema POS de Reparación
+            </p>
           </div>
 
-          {/* Login Form */}
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             {errorMsg && (
               <div className="bg-red-50 text-red-600 border border-red-200 text-xs p-3 rounded-md font-sans">
                 {errorMsg}
               </div>
             )}
+            {successMsg && (
+              <div className="bg-green-50 text-green-700 border border-green-200 text-xs p-3 rounded-md font-sans">
+                {successMsg}
+              </div>
+            )}
 
-            {/* Input: Username */}
+            {mode === "register" && (
+              <div className="flex flex-col gap-1.5">
+                <label
+                  className="text-xs font-semibold text-on-surface font-sans"
+                  htmlFor="displayName"
+                >
+                  Nombre completo
+                </label>
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none select-none text-[20px]">
+                    badge
+                  </span>
+                  <input
+                    id="displayName"
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => {
+                      setDisplayName(e.target.value);
+                      setErrorMsg("");
+                    }}
+                    placeholder="Ej: Juan Pérez"
+                    className="h-11 w-full pl-10 pr-3 rounded-md border border-outline-variant bg-white text-on-surface focus:border-tertiary focus:ring-1 focus:ring-tertiary transition-colors text-sm font-sans outline-none"
+                    required
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col gap-1.5">
-              <label 
-                className="text-xs font-semibold text-on-surface font-sans" 
-                htmlFor="username"
+              <label
+                className="text-xs font-semibold text-on-surface font-sans"
+                htmlFor="email"
               >
-                Company Name / User
+                Correo electrónico
               </label>
               <div className="relative">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none select-none text-[20px]">
                   person
                 </span>
                 <input
-                  id="username"
-                  type="text"
-                  value={username}
+                  id="email"
+                  type="email"
+                  value={email}
                   onChange={(e) => {
-                    setUsername(e.target.value);
-                    setErrorMsg('');
+                    setEmail(e.target.value);
+                    setErrorMsg("");
                   }}
-                  placeholder="Enter username"
+                  placeholder="correo@ejemplo.com"
                   className="h-11 w-full pl-10 pr-3 rounded-md border border-outline-variant bg-white text-on-surface focus:border-tertiary focus:ring-1 focus:ring-tertiary transition-colors text-sm font-sans outline-none"
                   required
                 />
               </div>
             </div>
 
-            {/* Input: Password */}
             <div className="flex flex-col gap-1.5">
-              <label 
-                className="text-xs font-semibold text-on-surface font-sans" 
+              <label
+                className="text-xs font-semibold text-on-surface font-sans"
                 htmlFor="password"
               >
-                Password
+                Contraseña
               </label>
               <div className="relative">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none select-none text-[20px]">
@@ -96,7 +176,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value);
-                    setErrorMsg('');
+                    setErrorMsg("");
                   }}
                   placeholder="••••••••"
                   className="h-11 w-full pl-10 pr-3 rounded-md border border-outline-variant bg-white text-on-surface focus:border-tertiary focus:ring-1 focus:ring-tertiary transition-colors text-sm font-sans outline-none"
@@ -105,51 +185,55 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
               </div>
             </div>
 
-            {/* Controls: Remember & Forgot Links */}
-            <div className="flex justify-between items-center mt-1 pb-1">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4.5 h-4.5 rounded border-outline-variant text-primary focus:ring-0 accent-primary cursor-pointer"
-                />
-                <span className="text-xs font-semibold text-on-surface-variant font-sans">
-                  Remember me
-                </span>
-              </label>
-              <a 
-                href="#forgot" 
-                onClick={(e) => {
-                  e.preventDefault();
-                  alert('Para restaurar contraseña o soporte técnico, contacte con el Administrador Sgto. de Digicell.');
-                }}
-                className="text-xs font-semibold text-tertiary hover:text-tertiary-container transition-colors font-sans decoration-transparent hover:underline"
-              >
-                Forgot password?
-              </a>
-            </div>
-
-            {/* Submit CTA button */}
             <button
-              id="submit-btn"
               type="submit"
-              className="h-12 w-full bg-primary hover:bg-primary-container text-white py-2 px-4 rounded-md font-sans text-sm font-semibold transition-colors duration-200 shadow-md shadow-primary/20 flex items-center justify-center gap-2 mt-2 outline-none cursor-pointer"
+              disabled={submitting}
+              className="h-12 w-full bg-primary hover:bg-primary-container disabled:opacity-50 text-white py-2 px-4 rounded-md font-sans text-sm font-semibold transition-colors duration-200 shadow-md shadow-primary/20 flex items-center justify-center gap-2 mt-2 outline-none cursor-pointer"
             >
-              Ingresar
-              <span className="material-symbols-outlined text-[18px]">login</span>
+              {submitting ? (
+                <span className="animate-spin material-symbols-outlined text-[18px]">
+                  progress_activity
+                </span>
+              ) : mode === "login" ? (
+                <>
+                  Ingresar
+                  <span className="material-symbols-outlined text-[18px]">
+                    login
+                  </span>
+                </>
+              ) : (
+                <>
+                  Crear Cuenta
+                  <span className="material-symbols-outlined text-[18px]">
+                    person_add
+                  </span>
+                </>
+              )}
             </button>
           </form>
 
+          <div className="text-center pt-2 border-t border-outline-variant">
+            <button
+              type="button"
+              onClick={() => {
+                setMode(mode === "login" ? "register" : "login");
+                setErrorMsg("");
+                setSuccessMsg("");
+              }}
+              className="text-xs font-semibold text-tertiary hover:text-tertiary-container transition-colors font-sans underline underline-offset-2 cursor-pointer outline-none"
+            >
+              {mode === "login"
+                ? "¿No tenés cuenta? Crear una nueva"
+                : "Ya tengo cuenta, iniciar sesión"}
+            </button>
+          </div>
         </div>
 
-        {/* Footnote Warning */}
         <div className="text-center mt-6 select-none">
           <p className="text-xs font-semibold text-on-surface-variant font-sans leading-relaxed">
-            Secure access for authorized technicians only.
+            Acceso seguro solo para técnicos autorizados.
           </p>
         </div>
-
       </div>
     </div>
   );

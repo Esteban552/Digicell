@@ -14,6 +14,19 @@ interface ReportsViewProps {
   showToast: (title: string, desc: string, type: 'success' | 'info' | 'error') => void;
 }
 
+const typeLabels: Record<string, string> = {
+  'POS Sale': 'Venta POS',
+  'Repair Advance': 'Anticipo de Reparación',
+  'Cash Movement': 'Movimiento de Caja',
+  'Repair Payment': 'Pago de Reparación'
+};
+
+const statusLabels: Record<string, string> = {
+  'Paid': 'Pagado',
+  'Advance': 'Anticipo',
+  'Outflow': 'Salida'
+};
+
 export default function ReportsView({
   logs,
   totalSalesSum,
@@ -50,15 +63,15 @@ export default function ReportsView({
       <section className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 w-full">
         <div>
           <h2 className="text-2xl font-bold text-on-surface tracking-tight font-sans">
-            Reports Activity
+            Actividad de Reportes
           </h2>
           <p className="text-xs font-sans text-on-surface-variant font-medium mt-1">
-            Overview of daily POS transactions, repair entries, and cash register updates.
+            Resumen de transacciones POS, órdenes de reparación y movimientos de caja.
           </p>
         </div>
 
         <div className="flex flex-col gap-1 w-44">
-          <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">Select Date</label>
+          <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">Seleccionar Fecha</label>
           <div className="relative">
             <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[16px]">
               calendar_today
@@ -122,7 +135,7 @@ export default function ReportsView({
           <div className="absolute top-0 right-0 p-4 opacity-5 text-on-surface">
             <span className="material-symbols-outlined text-[68px]">point_of_sale</span>
           </div>
-          <h3 className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">Total POS Sales</h3>
+          <h3 className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">Ventas POS Totales</h3>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold font-sans text-on-surface">
               ${totalSalesSum.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -133,7 +146,7 @@ export default function ReportsView({
             </span>
           </div>
           <p className="text-xs font-sans text-slate-400 mt-1 font-semibold">
-            {logs.filter(l => l.type === 'POS Sale').length} Transactions today
+            {logs.filter(l => l.type === 'POS Sale').length} Transacciones hoy
           </p>
         </div>
 
@@ -142,14 +155,14 @@ export default function ReportsView({
           <div className="absolute top-0 right-0 p-4 opacity-5 text-blue-600">
             <span className="material-symbols-outlined text-[68px]">build</span>
           </div>
-          <h3 className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">Repair Advances</h3>
+          <h3 className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">Anticipos de Reparación</h3>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold font-sans text-on-surface">
               ${totalAdvancesSum.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
           <p className="text-xs font-sans text-slate-400 mt-1 font-semibold">
-            From {logs.filter(l => l.type === 'Repair Advance').length} active repair tickets
+            De {logs.filter(l => l.type === 'Repair Advance').length} tickets activos
           </p>
         </div>
 
@@ -158,14 +171,14 @@ export default function ReportsView({
           <div className="absolute top-0 right-0 p-4 opacity-10 text-white">
             <span className="material-symbols-outlined text-[68px] icon-fill">account_balance_wallet</span>
           </div>
-          <h3 className="text-[11px] font-bold text-red-200 uppercase tracking-wider mb-2">Total Cash in Register</h3>
+          <h3 className="text-[11px] font-bold text-red-200 uppercase tracking-wider mb-2">Efectivo Total en Caja</h3>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold font-sans text-[#ffffff]">
               ${totalCashSum.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
           <p className="text-xs font-sans text-red-300 mt-1 font-semibold">
-            Ready for End of Day
+            Listo para Corte del Día
           </p>
         </div>
 
@@ -174,7 +187,7 @@ export default function ReportsView({
       {/* Detailed table Activity logs list layout card */}
       <section className="bg-white border border-outline-variant rounded-lg flex-1 flex flex-col overflow-hidden mb-6 shadow-sm min-h-[300px]">
         <div className="p-4 border-b border-outline-variant flex justify-between items-center bg-[#ffffff]">
-          <h3 className="text-sm font-bold text-on-surface font-sans">Daily Activity Log</h3>
+          <h3 className="text-sm font-bold text-on-surface font-sans">Registro de Actividad Diaria</h3>
           
           <div className="relative">
             <span className="absolute left-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-[14px]">
@@ -184,7 +197,7 @@ export default function ReportsView({
               type="text" 
               value={filterQuery}
               onChange={(e) => setFilterQuery(e.target.value)}
-              placeholder="Filter list..."
+              placeholder="Filtrar lista..."
               className="h-8 pl-6 pr-2 rounded border border-outline text-[11px] font-sans focus:border-tertiary outline-none w-36"
             />
           </div>
@@ -194,11 +207,11 @@ export default function ReportsView({
           <table className="w-full text-left border-collapse">
             <thead className="sticky top-0 bg-[#ffffff] border-b border-outline-variant/60 z-10 font-sans shadow-sm">
               <tr>
-                <th className="p-3 text-[10px] font-bold text-on-surface-variant uppercase bg-slate-50">Time</th>
-                <th className="p-3 text-[10px] font-bold text-on-surface-variant uppercase bg-slate-50">Type</th>
-                <th className="p-3 text-[10px] font-bold text-on-surface-variant uppercase bg-slate-50 w-2/5">Description</th>
-                <th className="p-3 text-[10px] font-bold text-on-surface-variant uppercase bg-slate-50 text-right">Amount</th>
-                <th className="p-3 text-[10px] font-bold text-on-surface-variant uppercase bg-slate-50 text-center">Status</th>
+                <th className="p-3 text-[10px] font-bold text-on-surface-variant uppercase bg-slate-50">Hora</th>
+                <th className="p-3 text-[10px] font-bold text-on-surface-variant uppercase bg-slate-50">Tipo</th>
+                <th className="p-3 text-[10px] font-bold text-on-surface-variant uppercase bg-slate-50 w-2/5">Descripción</th>
+                <th className="p-3 text-[10px] font-bold text-on-surface-variant uppercase bg-slate-50 text-right">Monto</th>
+                <th className="p-3 text-[10px] font-bold text-on-surface-variant uppercase bg-slate-50 text-center">Estado</th>
               </tr>
             </thead>
             <tbody className="text-xs select-text font-sans">
@@ -223,7 +236,7 @@ export default function ReportsView({
                           'payments'
                         }
                       </span>
-                      {log.type}
+                      {typeLabels[log.type] || log.type}
                     </span>
                   </td>
                   <td className="p-3 text-on-surface leading-snug font-medium font-sans">
@@ -238,7 +251,7 @@ export default function ReportsView({
                       log.status === 'Advance' ? 'bg-blue-100 text-blue-800' :
                       'bg-rose-100 text-rose-800'
                     }`}>
-                      {log.status}
+                      {statusLabels[log.status] || log.status}
                     </span>
                   </td>
                 </tr>
@@ -246,7 +259,7 @@ export default function ReportsView({
               {filteredLogs.length === 0 && (
                 <tr>
                   <td colSpan={5} className="p-8 text-center text-slate-400 font-sans font-semibold">
-                    No matching activity logs found.
+                    No se encontraron registros de actividad.
                   </td>
                 </tr>
               )}
@@ -255,7 +268,7 @@ export default function ReportsView({
         </div>
 
         <div className="p-3 border-t border-slate-200 bg-slate-50 flex justify-between items-center select-none font-sans text-[11px] leading-normal">
-          <span className="text-slate-500 font-medium">Showing {filteredLogs.length} of {logs.length} entries</span>
+          <span className="text-slate-500 font-medium">Mostrando {filteredLogs.length} de {logs.length} registros</span>
           <div className="flex gap-1">
             <button className="w-8 h-8 rounded border border-slate-300 flex items-center justify-center text-slate-400 hover:bg-white disabled:opacity-50" disabled>
               <span className="material-symbols-outlined text-[16px]">chevron_left</span>

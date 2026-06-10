@@ -1,11 +1,7 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useMemo } from 'react';
-import { CartItem } from '../types';
-import { PRESET_INVENTORY } from '../data';
+import type { CartItem } from '../types';
+import type { Product } from '../lib/supabase-types';
+import InventoryPanel from './InventoryPanel';
 
 interface POSViewProps {
   cart: CartItem[];
@@ -13,6 +9,8 @@ interface POSViewProps {
   onCompleteCheckout: (amountLocal: number, amountCard: number, amountUsd: number) => void;
   onRegisterCashMovement: (type: 'in' | 'out', amount: number, note: string) => void;
   showToast: (title: string, desc: string, type: 'success' | 'info' | 'error') => void;
+  products: Product[];
+  onRefetchProducts: () => Promise<void>;
 }
 
 export default function POSView({
@@ -20,13 +18,19 @@ export default function POSView({
   onSetCart,
   onCompleteCheckout,
   onRegisterCashMovement,
-  showToast
+  showToast,
+  products,
+  onRefetchProducts
 }: POSViewProps) {
   // Quick adder states
   const [itemName, setItemName] = useState('');
   const [itemQty, setItemQty] = useState(1);
   const [itemPrice, setItemPrice] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState<number | undefined>(undefined);
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'venta' | 'inventario'>('venta');
 
   // Modals state
   const [payModalOpen, setPayModalOpen] = useState(false);
@@ -45,10 +49,10 @@ export default function POSView({
   // Auto-suggestions calculation
   const suggestions = useMemo(() => {
     if (!itemName) return [];
-    return PRESET_INVENTORY.filter(p =>
+    return products.filter(p =>
       p.name.toLowerCase().includes(itemName.toLowerCase())
     ).slice(0, 4);
-  }, [itemName]);
+  }, [itemName, products]);
 
   // Totals calculations
   const subtotal = useMemo(() => {
@@ -68,9 +72,10 @@ export default function POSView({
   }, [total]);
 
   // Handle click on suggestion
-  const selectSuggestion = (name: string, price: number) => {
+  const selectSuggestion = (name: string, price: number, productId?: number) => {
     setItemName(name);
     setItemPrice(String(price));
+    setSelectedProductId(productId);
     setShowSuggestions(false);
   };
 
@@ -93,7 +98,8 @@ export default function POSView({
           id: 'cart_' + Date.now(),
           name: itemName.trim(),
           qty: finalQty,
-          price: finalPrice
+          price: finalPrice,
+          productId: selectedProductId,
         }];
       }
     });
@@ -101,6 +107,7 @@ export default function POSView({
     setItemName('');
     setItemPrice('');
     setItemQty(1);
+    setSelectedProductId(undefined);
     showToast('Artículo agregado', 'Se colocó en el carro de venta actual.', 'info');
   };
 
@@ -136,500 +143,391 @@ export default function POSView({
       showToast('Estructura vacía', 'Agrega algún producto antes de cobrar.', 'error');
       return;
     }
-    // Pre-populate cashLocal input with exact total rounded up to next 10 or fifty
-    const rounded = Math.ceil(total / 10) * 10;
-    setCashLocal(String(rounded));
-    setCardLocal('0.00');
-    setCashUsd('0.00');
+    setCashLocal((Math.ceil(total / 10) * 10).toFixed(2));
     setPayModalOpen(true);
   };
 
-  // Checkout modal calculations
-  const totalTendered = useMemo(() => {
-    const valCashLocal = Number(cashLocal) || 0;
-    const valCardLocal = Number(cardLocal) || 0;
-    const valCashUsd = Number(cashUsd) || 0;
-    return valCashLocal + valCardLocal + (valCashUsd * 18.50);
-  }, [cashLocal, cardLocal, cashUsd]);
-
-  const changeDue = useMemo(() => {
-    return Math.max(0, totalTendered - total);
-  }, [totalTendered, total]);
-
-  const isPaymentReady = useMemo(() => {
-    return totalTendered >= (total - 0.01);
-  }, [totalTendered, total]);
-
-  const completeCheckoutHandler = () => {
-    if (!isPaymentReady) {
-      showToast('Monto insuficiente', 'El total pagado debe cubrir la deuda.', 'error');
-      return;
-    }
-    onCompleteCheckout(Number(cashLocal) || 0, Number(cardLocal) || 0, Number(cashUsd) || 0);
+  const closePayModal = () => {
     setPayModalOpen(false);
   };
 
-  const saveCashMovementHandler = () => {
-    const amountVal = Number(cashMoveAmount);
-    if (!amountVal || amountVal <= 0) {
-      alert('Por favor introduce un monto válido.');
+  const handleProcessPay = () => {
+    const cash = Math.max(0, Number(cashLocal) || 0);
+    const card = Math.max(0, Number(cardLocal) || 0);
+    const usd = Math.max(0, Number(cashUsd) || 0);
+    onCompleteCheckout(cash, card, usd);
+    closePayModal();
+  };
+
+  const openCashModal = () => {
+    setCashModalOpen(true);
+  };
+
+  const closeCashModal = () => {
+    setCashModalOpen(false);
+  };
+
+  const handleCashMovement = () => {
+    const amount = Math.max(0, Number(cashMoveAmount) || 0);
+    if (amount <= 0) {
+      showToast('Cantidad Inválida', 'El monto debe ser mayor a 0.', 'error');
       return;
     }
-    onRegisterCashMovement(cashMoveType, amountVal, cashMoveNote.trim() || 'Movimiento manual de caja');
-    setCashModalOpen(false);
+    if (!cashMoveNote.trim()) {
+      showToast('Falta Nota', 'Describí el motivo del movimiento.', 'error');
+      return;
+    }
+    onRegisterCashMovement(cashMoveType, amount, cashMoveNote.trim());
     setCashMoveAmount('');
     setCashMoveNote('');
+    closeCashModal();
   };
 
   return (
-    <div className="flex-1 grid grid-cols-12 gap-6 select-none font-sans">
-      
-      {/* Left Area: Cart & Tools (8 columns) */}
-      <div className="col-span-12 lg:col-span-8 flex flex-col gap-6">
-        
-        {/* Quick Input Bar Form */}
-        <form onSubmit={handleAddItem} className="relative bg-white border border-outline-variant rounded-md p-4 flex gap-3 items-end shadow-sm">
-          
-          <div className="flex-1 relative">
-            <label className="block text-xs font-semibold text-on-surface mb-1.5 font-sans">Item Code / Name</label>
-            <input
-              type="text"
-              value={itemName}
-              onChange={(e) => {
-                setItemName(e.target.value);
-                setShowSuggestions(true);
-              }}
-              onFocus={() => setShowSuggestions(true)}
-              placeholder="Scan or type..."
-              className="w-full h-10 border border-outline rounded px-3 focus:border-tertiary focus:ring-1 focus:ring-tertiary outline-none text-sm font-sans"
-              required
-            />
-            {/* Live Autocomplete Suggestions dropdown */}
-            {showSuggestions && suggestions.length > 0 && (
-              <div className="absolute left-0 right-0 top-18 bg-white border border-outline rounded shadow-lg z-50 overflow-hidden flex flex-col">
-                {suggestions.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => selectSuggestion(item.name, item.price)}
-                    className="w-full px-4 py-2.5 hover:bg-slate-50 text-left text-xs font-sans text-on-surface border-b border-slate-100 last:border-0 flex justify-between items-center outline-none"
-                  >
-                    <span className="font-semibold">{item.name}</span>
-                    <span className="text-primary font-bold">${item.price.toFixed(2)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="w-20">
-            <label className="block text-xs font-semibold text-on-surface mb-1.5 font-sans">Qty</label>
-            <input
-              type="number"
-              min="1"
-              value={itemQty}
-              onChange={(e) => setItemQty(Math.max(1, Number(e.target.value) || 1))}
-              className="w-full h-10 border border-outline rounded px-3 focus:border-tertiary focus:ring-1 focus:ring-tertiary outline-none text-center text-sm font-sans"
-              required
-            />
-          </div>
-
-          <div className="w-28">
-            <label className="block text-xs font-semibold text-on-surface mb-1.5 font-sans">Price</label>
-            <div className="relative">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant font-sans">$</span>
-              <input
-                type="text"
-                placeholder="0.00"
-                value={itemPrice}
-                onChange={(e) => setItemPrice(e.target.value)}
-                className="w-full h-10 border border-outline rounded pl-6 pr-3 focus:border-tertiary focus:ring-1 focus:ring-tertiary outline-none text-right text-sm font-sans"
-              />
-            </div>
-          </div>
-
+    <div className="flex-1 flex flex-col gap-4 select-none h-full">
+      {/* Header Label */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-on-surface tracking-tight font-sans">Punto de Venta</h2>
+          <p className="text-xs font-sans text-on-surface-variant font-medium mt-1">Registrar cobros y movimientos de caja.</p>
+        </div>
+        <div className="flex gap-1 bg-surface-container-high rounded-lg p-0.5">
           <button
-            type="submit"
-            className="h-10 px-4 bg-secondary hover:bg-primary text-white rounded font-sans font-semibold flex items-center justify-center gap-1 cursor-pointer transition-colors outline-none"
+            onClick={() => setActiveTab('venta')}
+            className={`px-4 py-1.5 rounded-md text-xs font-bold font-sans transition-all outline-none cursor-pointer ${activeTab === 'venta' ? 'bg-white text-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}`}
           >
-            <span className="material-symbols-outlined text-[18px]">add_shopping_cart</span>
-            Add
+            Venta
           </button>
-        </form>
+          <button
+            onClick={() => setActiveTab('inventario')}
+            className={`px-4 py-1.5 rounded-md text-xs font-bold font-sans transition-all outline-none cursor-pointer ${activeTab === 'inventario' ? 'bg-white text-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}`}
+          >
+            Inventario
+          </button>
+        </div>
+      </div>
 
-        {/* Cart Table Container */}
-        <div className="bg-white border border-outline-variant rounded-md flex-1 flex flex-col overflow-hidden shadow-sm min-h-[350px]">
+      {activeTab === 'venta' ? (
+        /* Main Layout Caja-Carrito */
+        <div className="flex-1 flex gap-5 min-h-0">
           
-          {/* Header row */}
-          <div className="flex items-center justify-between p-4 border-b border-outline-variant bg-surface-container-low select-none">
-            <h2 className="text-base font-bold text-on-surface font-sans">Current Sale</h2>
-            
-            <button
-              type="button"
-              onClick={() => setCashModalOpen(true)}
-              className="text-tertiary hover:underline text-xs font-semibold flex items-center gap-1.5 outline-none cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[16px]">payments</span>
-              Cash Movement
-            </button>
-          </div>
-
-          {/* Cart items list */}
-          <div className="flex-1 overflow-y-auto">
-            {cart.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center p-8">
-                <span className="material-symbols-outlined text-slate-300 text-[60px] select-none">
-                  shopping_cart_checkout
-                </span>
-                <p className="text-sm font-sans text-on-surface-variant font-medium mt-3">
-                  Carro de venta vacío.
-                </p>
-                <p className="text-xs font-sans text-slate-400 mt-1 max-w-xs leading-normal">
-                  Utiliza la barra superior para buscar productos cargados en el inventario o escanea códigos.
-                </p>
-              </div>
-            ) : (
-              <table className="w-full text-left border-collapse font-sans">
-                <thead className="bg-[#ffffff] sticky top-0 border-b border-outline-variant/60 z-15">
-                  <tr>
-                    <th className="p-3 text-[11px] font-bold text-on-surface-variant font-sans w-12 text-center uppercase tracking-wider">#</th>
-                    <th className="p-3 text-[11px] font-bold text-on-surface-variant font-sans uppercase tracking-wider">Item Description</th>
-                    <th className="p-3 text-[11px] font-bold text-on-surface-variant font-sans w-24 text-center uppercase tracking-wider">Qty</th>
-                    <th className="p-3 text-[11px] font-bold text-on-surface-variant font-sans w-24 text-right uppercase tracking-wider">Price</th>
-                    <th className="p-3 text-[11px] font-bold text-on-surface-variant font-sans w-28 text-right uppercase tracking-wider">Subtotal</th>
-                    <th className="p-3 text-[11px] font-bold text-on-surface-variant font-sans w-12 text-center uppercase tracking-wider"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-sans text-sm text-[#131b2e]">
-                  {cart.map((item, idx) => (
-                    <tr 
-                      key={item.id} 
-                      className="even:bg-surface-container-low/50 hover:bg-slate-50/50 transition-colors"
-                    >
-                      <td className="p-3 text-center text-xs text-on-surface-variant font-medium">{idx + 1}</td>
-                      <td className="p-3 font-semibold text-xs leading-snug">{item.name}</td>
-                      <td className="p-3">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleChangeQty(item.id, 'down')}
-                            className="w-6 h-6 border border-slate-300 rounded flex items-center justify-center text-slate-500 hover:bg-slate-100 cursor-pointer outline-none select-none text-xs"
-                          >
-                            -
-                          </button>
-                          <span className="font-semibold text-xs text-center w-6">{item.qty}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleChangeQty(item.id, 'up')}
-                            className="w-6 h-6 border border-slate-300 rounded flex items-center justify-center text-slate-500 hover:bg-slate-100 cursor-pointer outline-none select-none text-xs"
-                          >
-                            +
-                          </button>
-                        </div>
-                      </td>
-                      <td className="p-3 text-right font-mono text-xs text-on-surface-variant font-medium">
-                        ${item.price.toFixed(2)}
-                      </td>
-                      <td className="p-3 text-right font-mono font-semibold text-xs">
-                        ${(item.price * item.qty).toFixed(2)}
-                      </td>
-                      <td className="p-3 text-center">
+          {/* LEFT Panel: Quick add + Products grid */}
+          <div className="flex-1 flex flex-col gap-4 overflow-y-auto pr-2">
+            {/* Quick Add Form */}
+            <form onSubmit={handleAddItem} className="bg-white border border-outline-variant rounded-md p-4 shadow-sm relative">
+              <div className="grid grid-cols-5 gap-2">
+                <div className="relative col-span-2">
+                  <input
+                    type="text"
+                    value={itemName}
+                    onChange={(e) => { setItemName(e.target.value); setShowSuggestions(true); }}
+                    onFocus={() => setShowSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                    placeholder="Nombre del producto"
+                    className="h-10 w-full border border-outline rounded px-3 focus:border-tertiary outline-none text-sm font-sans"
+                    autoComplete="off"
+                  />
+                  {/* Suggestions dropdown */}
+                  {showSuggestions && suggestions.length > 0 && (
+                    <div className="absolute left-0 top-full mt-1 w-full bg-white border border-outline-variant rounded-md shadow-lg z-20">
+                      {suggestions.map(p => (
                         <button
+                          key={p.id}
                           type="button"
-                          onClick={() => handleDeleteItem(item.id)}
-                          className="text-error hover:text-red-700 p-1 rounded hover:bg-error-container/30 transition-colors outline-none cursor-pointer"
+                          onMouseDown={() => selectSuggestion(p.name, p.price, p.id)}
+                          className="w-full text-left px-3 py-2 hover:bg-surface-container-low text-xs font-sans font-semibold flex justify-between items-center outline-none cursor-pointer"
                         >
-                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                          <span className="truncate">{p.name}</span>
+                          <span className="font-sans text-tertiary font-bold ml-2 shrink-0">${p.price.toFixed(2)}</span>
                         </button>
-                      </td>
-                    </tr>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <input
+                    type="number"
+                    value={itemQty || ''}
+                    onChange={(e) => setItemQty(Math.max(1, Number(e.target.value) || 1))}
+                    placeholder="Cant."
+                    className="h-10 w-full border border-outline rounded px-3 focus:border-tertiary outline-none text-sm font-sans"
+                    min="1"
+                  />
+                </div>
+                <div>
+                  <input
+                    type="number"
+                    value={itemPrice}
+                    onChange={(e) => setItemPrice(e.target.value)}
+                    placeholder="$ Precio"
+                    className="h-10 w-full border border-outline rounded px-3 focus:border-tertiary outline-none text-sm font-sans"
+                    step="0.01"
+                  />
+                </div>
+                <div>
+                  <button
+                    type="submit"
+                    className="h-10 w-full bg-primary hover:bg-primary-container text-white rounded font-sans text-xs font-semibold shadow-sm flex items-center justify-center gap-1 outline-none cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">add_shopping_cart</span>
+                    Agregar
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            {/* Products Grid */}
+            <div className="bg-white border border-outline-variant rounded-md p-4 shadow-sm flex-1 min-h-0 overflow-y-auto">
+              {products.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-xs font-sans text-on-surface-variant font-medium">No hay productos en el catálogo.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {products.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setItemName(p.name);
+                      setItemPrice(String(p.price));
+                      setSelectedProductId(p.id);
+                      }}
+                      className="border border-outline-variant rounded-md p-3 text-left hover:bg-surface-container-low hover:border-primary transition-all cursor-pointer outline-none"
+                    >
+                      <h4 className="text-xs font-bold text-on-surface truncate font-sans">{p.name}</h4>
+                      <p className="font-sans text-tertiary font-bold text-xs mt-1">${p.price.toFixed(2)}</p>
+                      <p className="text-[10px] font-sans text-on-surface-variant mt-0.5">{p.category}</p>
+                      <p className="text-[10px] font-sans text-on-surface-variant">{p.stock > 0 ? `${p.stock} en stock` : 'Sin stock'}</p>
+                    </button>
                   ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-
-      </div>
-
-      {/* Right Area: Totals & Payments Panel (4 columns) */}
-      <div className="col-span-12 lg:col-span-4 flex flex-col gap-6">
-        
-        {/* Terminal Metadata Card */}
-        <div className="bg-white border border-outline-variant rounded-md p-4 shadow-sm select-none font-sans text-xs">
-          <div className="flex justify-between items-center mb-2.5">
-            <span className="text-on-surface-variant font-medium">Terminal</span>
-            <span className="font-semibold text-on-surface">POS-01</span>
-          </div>
-          <div className="flex justify-between items-center mb-2.5">
-            <span className="text-on-surface-variant font-medium">Cashier</span>
-            <span className="font-semibold text-on-surface">J. Cashier</span>
-          </div>
-          <div className="flex justify-between items-center pt-2.5 border-t border-outline-variant/60">
-            <span className="text-on-surface-variant font-medium">Exchange Rate (USD)</span>
-            <span className="font-semibold text-on-surface">$1 = 18.50 MXN</span>
-          </div>
-        </div>
-
-        {/* Financial Totals layout block */}
-        <div className="bg-white border border-outline-variant rounded-md p-5 shadow-sm flex-1 flex flex-col justify-end min-h-[300px]">
-          
-          <div className="space-y-2.5 mb-5 pb-5 border-b border-slate-100 font-sans text-xs select-none">
-            <div className="flex justify-between text-on-surface-variant">
-              <span>Subtotal</span>
-              <span className="font-semibold font-mono">${subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-on-surface-variant">
-              <span>Tax (16%)</span>
-              <span className="font-semibold font-mono">${tax.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-on-surface-variant">
-              <span>Discount</span>
-              <span className="font-semibold font-mono text-secondary">-$0.00</span>
-            </div>
-          </div>
-
-          <div className="mb-8 select-none">
-            <div className="flex justify-between items-end">
-              <span className="text-sm font-bold text-on-surface font-sans uppercase">Total</span>
-              <div className="text-right">
-                <div className="text-3xl font-bold text-primary tracking-tight font-sans">
-                  ${total.toFixed(2)}
                 </div>
-                <div className="text-[10px] font-sans font-bold text-on-surface-variant mt-1">
-                  USD Equiv: ${totalUsd.toFixed(2)}
-                </div>
-              </div>
+              )}
             </div>
           </div>
 
-          {/* Action trigger buttons */}
-          <div className="grid grid-cols-2 gap-3 mt-auto">
-            <button
-              onClick={handleCancelSale}
-              disabled={cart.length === 0}
-              className="h-10 border border-outline text-on-surface rounded font-sans text-xs font-semibold hover:bg-slate-50 transition-colors flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer outline-none"
-            >
-              <span className="material-symbols-outlined text-[16px]">cancel</span>
-              Cancelar Cart
-            </button>
+          {/* RIGHT Panel: Cart */}
+          <div className="w-[380px] shrink-0 bg-white border border-outline-variant rounded-md shadow-sm flex flex-col">
             
-            <button
-              onClick={() => onSetCart([])}
-              disabled={cart.length === 0}
-              className="h-10 border border-outline text-on-surface rounded font-sans text-xs font-semibold hover:bg-slate-50 transition-colors flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer outline-none"
-            >
-              <span className="material-symbols-outlined text-[16px]">close</span>
-              Cerrar Venta
-            </button>
-            
-            <button
-              onClick={openPayModal}
-              className="col-span-2 h-14 bg-primary hover:bg-primary-container text-white rounded font-sans text-base font-bold shadow-md shadow-primary/20 hover:shadow-lg transition-all flex items-center justify-center gap-2 mt-3 cursor-pointer outline-none"
-            >
-              <span className="material-symbols-outlined text-[20px]">point_of_sale</span>
-              Pay Total (F5)
-            </button>
-          </div>
-
-        </div>
-
-      </div>
-
-      {/* ================= MODAL: CHECKOUT PAYMENT (F5) ================= */}
-      {payModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg border border-outline-variant w-full max-w-xl shadow-2xl flex flex-col overflow-hidden">
-            
-            <div className="px-6 py-4 border-b border-outline-variant bg-surface-container-low flex justify-between items-center select-none">
-              <h3 className="text-base font-bold text-on-surface font-sans flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary">payments</span>
-                Checkout Payment (F5)
+            {/* Cart header */}
+            <div className="px-4 py-2 border-b border-outline-variant flex items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-on-surface font-sans flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-lg">shopping_cart</span>
+                Carro ({cart.length})
               </h3>
-              <button 
-                onClick={() => setPayModalOpen(false)}
-                className="text-on-surface-variant hover:text-error transition-colors"
+              <button
+                onClick={handleCancelSale}
+                className="text-[11px] font-sans font-semibold bg-red-600 text-white px-3 py-1.5 rounded hover:bg-red-700 transition-all outline-none cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[20px]">close</span>
+                Cancelar Venta
               </button>
             </div>
 
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 bg-white">
-              {/* Payment inputs */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface mb-1.5">Cash (Local MXN)</label>
-                  <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant">$</span>
-                    <input
-                      type="text"
-                      value={cashLocal}
-                      onChange={(e) => setCashLocal(e.target.value)}
-                      className="w-full h-10 border border-outline rounded pl-6 pr-3 focus:border-tertiary focus:ring-1 focus:ring-tertiary outline-none text-right font-mono text-sm"
-                    />
-                  </div>
+            {/* Items scrolling list */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+              {cart.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-3">
+                  <span className="material-symbols-outlined text-4xl text-outline-variant">add_circle</span>
+                  <p className="font-sans text-xs text-on-surface-variant text-center max-w-[240px] font-medium leading-relaxed">
+                    Utiliza la barra superior para buscar productos cargados en el inventario o escanea códigos.
+                  </p>
                 </div>
+              ) : (
+                cart.map((item) => (
+                  <div key={item.id} className="flex items-center gap-2 py-2 px-2 rounded hover:bg-surface-container-low group">
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-sans text-xs font-bold text-on-surface truncate">{item.name}</h4>
+                      <p className="font-sans text-[11px] text-on-surface-variant font-semibold">${item.price.toFixed(2)} c/u</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleChangeQty(item.id, 'down')}
+                        className="w-7 h-7 rounded border border-outline-variant flex items-center justify-center hover:bg-surface-container-low font-sans text-sm font-bold outline-none cursor-pointer"
+                      >-</button>
+                      <span className="w-8 text-center font-sans text-xs font-bold">{item.qty}</span>
+                      <button
+                        onClick={() => handleChangeQty(item.id, 'up')}
+                        className="w-7 h-7 rounded border border-outline-variant flex items-center justify-center hover:bg-surface-container-low font-sans text-sm font-bold outline-none cursor-pointer"
+                      >+</button>
+                    </div>
+                    <p className="w-16 text-right font-sans text-xs font-bold text-on-surface">${(item.price * item.qty).toFixed(2)}</p>
+                    <button
+                      onClick={() => handleDeleteItem(item.id)}
+                      className="p-1 rounded hover:bg-error-container text-on-surface-variant hover:text-error opacity-0 group-hover:opacity-100 transition-all outline-none cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">close</span>
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface mb-1.5">Credit/Debit Card</label>
-                  <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant">$</span>
-                    <input
-                      type="text"
-                      value={cardLocal}
-                      onChange={(e) => setCardLocal(e.target.value)}
-                      className="w-full h-10 border border-outline rounded pl-6 pr-3 focus:border-tertiary focus:ring-1 focus:ring-tertiary outline-none text-right font-mono text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface mb-1.5">Cash (USD Equiv)</label>
-                  <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant">US$</span>
-                    <input
-                      type="text"
-                      value={cashUsd}
-                      onChange={(e) => setCashUsd(e.target.value)}
-                      className="w-full h-10 border border-outline rounded pl-8 pr-3 focus:border-tertiary focus:ring-1 focus:ring-tertiary outline-none text-right font-mono text-sm"
-                    />
-                  </div>
-                </div>
+            {/* Totals + Action Buttons */}
+            <div className="border-t border-outline-variant p-4 space-y-2">
+              <div className="flex justify-between text-xs font-sans">
+                <span className="text-on-surface-variant font-semibold">Subtotal</span>
+                <span className="font-bold">${subtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-xs font-sans">
+                <span className="text-on-surface-variant font-semibold">IVA (16%)</span>
+                <span className="font-bold">${tax.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm font-sans pt-2 border-t border-outline-variant">
+                <span className="font-bold text-on-surface">Total</span>
+                <span className="font-bold text-primary text-lg">${total.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-[10px] font-sans text-on-surface-variant font-semibold">
+                <span>Tipo de Cambio (USD 1.00 = MX$18.50)</span>
+                <span>≈ ${totalUsd.toFixed(2)} USD</span>
               </div>
 
-              {/* Balance summaries */}
-              <div className="bg-surface-container-low border border-outline-variant rounded-md p-4 flex flex-col justify-center select-none font-sans text-xs">
-                <div className="flex justify-between text-on-surface pb-2 border-b border-outline-variant/60">
-                  <span>Total Due</span>
-                  <span className="font-mono font-bold text-sm">${total.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-on-surface-variant py-2 border-b border-outline-variant/60">
-                  <span>Tendered</span>
-                  <span className="font-mono font-medium">${totalTendered.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between py-3">
-                  <span className="font-bold text-on-surface">Change Due</span>
-                  <span className="font-mono font-bold text-lg text-primary">${changeDue.toFixed(2)}</span>
-                </div>
-
-                {isPaymentReady ? (
-                  <div className="mt-3 p-2.5 bg-emerald-50 rounded border border-emerald-200 flex items-center gap-2 text-emerald-700">
-                    <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                    <span className="font-medium text-[10px]">Payment matches or exceeds. Ready to print receipts.</span>
-                  </div>
-                ) : (
-                  <div className="mt-3 p-2.5 bg-amber-50 rounded border border-amber-200 flex items-center gap-2 text-amber-700">
-                    <span className="material-symbols-outlined text-[16px]">info</span>
-                    <span className="font-medium text-[10px]">Remaining Balance: ${(total - totalTendered).toFixed(2)} MXN</span>
-                  </div>
-                )}
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={openCashModal}
+                  className="flex-1 h-10 border border-outline-variant rounded-md text-xs font-semibold font-sans hover:bg-surface-container-low transition-all outline-none cursor-pointer"
+                >
+                  Movimiento de Caja
+                </button>
+                <button
+                  onClick={openPayModal}
+                  className="flex-1 h-10 bg-primary hover:bg-primary-container text-white rounded-md text-xs font-bold font-sans shadow-sm shadow-primary/20 outline-none cursor-pointer"
+                >
+                  Cobrar
+                </button>
               </div>
             </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0">
+          <InventoryPanel
+            products={products}
+            onRefetchProducts={onRefetchProducts}
+            showToast={showToast}
+          />
+        </div>
+      )}
 
-            <div className="px-6 py-4 border-t border-outline-variant bg-surface-container-lowest flex justify-end gap-3 select-none">
-              <button 
-                onClick={() => setPayModalOpen(false)}
-                className="px-4 h-10 border border-outline text-on-surface rounded font-sans text-xs font-semibold hover:bg-slate-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={completeCheckoutHandler}
-                disabled={!isPaymentReady}
-                className="px-5 h-10 bg-primary hover:bg-primary-container text-white rounded font-sans text-xs font-bold shadow-md hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 transition-all"
-              >
-                <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                Complete Sale (F8)
-              </button>
+      {/* Payment Modal Overlay */}
+      {payModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={closePayModal}>
+          <div className="bg-white rounded-xl border border-outline-variant shadow-xl w-[420px] p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-sans font-bold text-on-surface">Procesar Pago</h3>
+            <p className="text-xs font-sans text-on-surface-variant font-semibold mt-1">Total a cobrar: <span className="text-primary font-bold">${total.toFixed(2)}</span></p>
+
+            <div className="mt-5 space-y-4">
+              <InputField label="Efectivo (MXN)" value={cashLocal} onChange={setCashLocal} />
+              <InputField label="Tarjeta (MXN)" value={cardLocal} onChange={setCardLocal} />
+              <InputField label="Dólares (USD)" value={cashUsd} onChange={setCashUsd} />
             </div>
 
+            {(() => {
+              const cash = Math.max(0, Number(cashLocal) || 0);
+              const card = Math.max(0, Number(cardLocal) || 0);
+              const usdValue = Math.max(0, Number(cashUsd) || 0) * 18.50;
+              const sumPay = cash + card + usdValue;
+              const change = sumPay - total;
+              return (
+                <div className="mt-4 pt-3 border-t border-outline-variant space-y-1 text-xs font-sans">
+                  <div className="flex justify-between text-on-surface-variant font-semibold">
+                    <span>Total cobrado</span>
+                    <span>${sumPay.toFixed(2)}</span>
+                  </div>
+                  {change >= 0 && (
+                    <div className="flex justify-between text-tertiary font-bold">
+                      <span>Cambio</span>
+                      <span>${change.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {change < 0 && (
+                    <div className="flex justify-between text-red-600 font-bold">
+                      <span>Faltante</span>
+                      <span>${Math.abs(change).toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            <div className="flex gap-2 mt-5">
+              <button onClick={closePayModal} className="flex-1 h-10 border border-outline-variant rounded-md text-xs font-semibold font-sans outline-none cursor-pointer">
+                Cancelar
+              </button>
+              <button onClick={handleProcessPay} className="flex-1 h-10 bg-primary hover:bg-primary-container text-white rounded-md text-xs font-bold font-sans shadow-sm outline-none cursor-pointer">
+                Confirmar Venta
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ================= MODAL: REGISTER CASH MOVEMENT ================= */}
+      {/* Cash Movement Modal */}
       {cashModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg border border-outline-variant w-full max-w-md shadow-2xl flex flex-col overflow-hidden">
-            
-            <div className="px-5 py-3.5 border-b border-outline-variant bg-surface-container-low flex justify-between items-center select-none">
-              <h3 className="text-sm font-bold text-on-surface font-sans">Register Cash Movement</h3>
-              <button 
-                onClick={() => setCashModalOpen(false)}
-                className="text-on-surface-variant hover:text-error transition-colors font-semibold"
-              >
-                <span className="material-symbols-outlined text-[18px]">close</span>
-              </button>
-            </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={closeCashModal}>
+          <div className="bg-white rounded-xl border border-outline-variant shadow-xl w-[380px] p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-sans font-bold text-on-surface">Movimiento de Caja</h3>
+            <p className="text-xs font-sans text-on-surface-variant font-semibold mt-1">Registrar entrada o salida de efectivo.</p>
 
-            <div className="p-5 space-y-4 font-sans text-xs">
-              <div className="flex gap-6 select-none font-sans">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input 
-                    type="radio" 
-                    name="moveType" 
-                    checked={cashMoveType === 'in'}
-                    onChange={() => setCashMoveType('in')}
-                    className="w-4 h-4 text-primary accent-primary cursor-pointer focus:ring-0"
-                  />
-                  <span className="font-semibold text-on-surface">Cash In (Pay-in)</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input 
-                    type="radio" 
-                    name="moveType" 
-                    checked={cashMoveType === 'out'}
-                    onChange={() => setCashMoveType('out')}
-                    className="w-4 h-4 text-primary accent-primary cursor-pointer focus:ring-0"
-                  />
-                  <span className="font-semibold text-on-surface">Cash Out (Payout)</span>
-                </label>
-              </div>
-
+            <div className="mt-5 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-on-surface mb-1.5">Amount</label>
-                <div className="relative">
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant">$</span>
-                  <input
-                    type="text"
-                    placeholder="0.00"
-                    value={cashMoveAmount}
-                    onChange={(e) => setCashMoveAmount(e.target.value)}
-                    className="w-full h-10 border border-outline rounded pl-6 pr-3 focus:border-tertiary outline-none font-mono text-sm"
-                  />
+                <label className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider font-sans">Tipo</label>
+                <div className="flex gap-2 mt-1">
+                  <button
+                    onClick={() => setCashMoveType('in')}
+                    className={`flex-1 h-10 rounded-md border text-xs font-semibold font-sans transition-all outline-none cursor-pointer ${cashMoveType === 'in' ? 'bg-success-container text-success border-success' : 'border-outline-variant'}`}
+                  >
+                    Entrada
+                  </button>
+                  <button
+                    onClick={() => setCashMoveType('out')}
+                    className={`flex-1 h-10 rounded-md border text-xs font-semibold font-sans transition-all outline-none cursor-pointer ${cashMoveType === 'out' ? 'bg-error-container text-error border-error' : 'border-outline-variant'}`}
+                  >
+                    Salida
+                  </button>
                 </div>
               </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-on-surface mb-1.5">Reason / Note</label>
-                <textarea
+              <InputField label="Monto" value={cashMoveAmount} onChange={setCashMoveAmount} />
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider font-sans">Nota</label>
+                <input
+                  type="text"
                   value={cashMoveNote}
                   onChange={(e) => setCashMoveNote(e.target.value)}
-                  placeholder="Enter reason for movement..."
-                  className="w-full border border-outline rounded p-2.5 focus:border-tertiary focus:ring-1 focus:ring-tertiary outline-none text-sm h-24 resize-none font-sans leading-normal"
+                  placeholder="Motivo del movimiento"
+                  className="h-10 border border-outline rounded px-3 focus:border-tertiary outline-none text-sm font-sans"
                 />
               </div>
             </div>
 
-            <div className="px-5 py-3.5 border-t border-outline-variant bg-surface-container-lowest flex justify-end gap-3 select-none">
-              <button 
-                onClick={() => setCashModalOpen(false)}
-                className="px-4 h-10 border border-outline text-on-surface rounded font-sans text-xs font-semibold hover:bg-slate-50 transition-colors"
-              >
-                Cancel
+            <div className="flex gap-2 mt-5">
+              <button onClick={closeCashModal} className="flex-1 h-10 border border-outline-variant rounded-md text-xs font-semibold font-sans outline-none cursor-pointer">
+                Cancelar
               </button>
-              <button 
-                onClick={saveCashMovementHandler}
-                className="px-4 h-10 bg-on-surface hover:opacity-90 text-white rounded font-sans text-xs font-bold transition-all"
+              <button
+                onClick={handleCashMovement}
+                className="flex-1 h-10 bg-primary hover:bg-primary-container text-white rounded-md text-xs font-bold font-sans shadow-sm outline-none cursor-pointer"
               >
-                Save Movement
+                Registrar
               </button>
             </div>
-
           </div>
         </div>
       )}
+    </div>
+  );
+}
 
+function InputField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider font-sans">{label}</label>
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-10 border border-outline rounded px-3 focus:border-tertiary outline-none text-sm font-sans"
+        step="0.01"
+      />
     </div>
   );
 }
