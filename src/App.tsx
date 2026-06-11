@@ -27,6 +27,25 @@ import { useSettings } from './hooks/useSettings';
 import { useProducts } from './hooks/useProducts';
 import { ActiveView, RepairOrder, CartItem } from './types';
 
+const DRAFT_ID = 'draft';
+
+function blankRepair(): RepairOrder {
+  const today = new Date().toISOString().split('T')[0];
+  return {
+    id: DRAFT_ID,
+    clientName: '', clientPhone: '', clientEmail: '',
+    deviceBrand: 'Apple', deviceModel: '', deviceSerial: '',
+    devicePassword: '', deviceColor: '', powersOn: 'Yes',
+    batteryPercent: '', chargerLeft: false, coverLeft: false,
+    receivingCondition: '', problemReported: '', status: 'in_review',
+    technician: 'Unassigned', deliveryDate: today,
+    warrantyEnd: new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0],
+    totalCost: 0, advancePaid: 0, remainingBalance: 0,
+    footnote: 'Garantía de 30 días en piezas reemplazadas. No nos hacemos responsables por equipos olvidados después de 60 días.',
+    createdAt: new Date().toISOString(),
+  };
+}
+
 export default function App() {
   // Supabase Auth session
   const [session, setSession] = useState<Session | null>(null);
@@ -102,6 +121,9 @@ export default function App() {
   const { data: products, refetch: refetchProducts } = useProducts();
   const [cart, setCart] = useState<CartItem[]>(INITIAL_CART);
 
+  // Draft repair for new notes (not yet saved to DB)
+  const [draftRepair, setDraftRepair] = useState<RepairOrder>(blankRepair);
+
   // Active loaded repair inside Order Intake Form
   const [selectedRepairId, setSelectedRepairId] = useState<string>('');
   // Set initial selected repair from DB data once loaded
@@ -153,41 +175,127 @@ export default function App() {
     }
   };
 
-  // Create a brand new vacant repair order
-  const handleCreateNewRepair = async () => {
-    const newOrder = await createRepairInDb();
-    if (!newOrder) {
-      showToast('Error', 'No se pudo crear la orden de reparación.', 'error');
-      return;
-    }
-    setRepairs(prev => [newOrder, ...prev]);
-    setSelectedRepairId(newOrder.id);
+  // Create a brand new vacant repair order (local draft, no DB insert yet)
+  const handleCreateNewRepair = () => {
+    setDraftRepair(blankRepair());
+    setSelectedRepairId(DRAFT_ID);
     setCurrentView('repairs');
-    showToast('Nueva Orden', `Se inició folio #${newOrder.id} para edición.`, 'info');
+    showToast('Nueva Nota', 'Completá los datos y guardá para asignar el folio.', 'info');
   };
 
   // Handle updates inside repair forms (local-only for instant response)
   const handleUpdateRepair = (id: string, updatedFields: Partial<RepairOrder>) => {
-    setRepairs(prev => prev.map(r => r.id === id ? { ...r, ...updatedFields } : r));
+    if (id === DRAFT_ID) {
+      setDraftRepair(prev => ({ ...prev, ...updatedFields }));
+    } else {
+      setRepairs(prev => prev.map(r => r.id === id ? { ...r, ...updatedFields } : r));
+    }
   };
 
   // Finalize/Save the repair order, syncing to Supabase
   const handleSaveRepairOrder = async (id: string) => {
-    const orderRef = repairs.find(r => r.id === id);
+    // Resolve the repair data (draft or existing)
+    const orderRef = id === DRAFT_ID ? draftRepair : repairs.find(r => r.id === id);
     if (!orderRef) return;
 
-    if (!orderRef.clientName?.trim()) {
-      showToast('Falta nombre', 'Por favor llena el nombre del cliente.', 'error');
+    // Validations
+    const errors: string[] = [];
+    if (!orderRef.clientName?.trim()) errors.push('El nombre del cliente es obligatorio.');
+    if (orderRef.totalCost < 0) errors.push('El costo total no puede ser negativo.');
+    if (orderRef.advancePaid < 0) errors.push('El anticipo no puede ser negativo.');
+    if (orderRef.advancePaid > orderRef.totalCost) errors.push('El anticipo no puede superar el costo total.');
+    if (orderRef.totalCost > 0 && !orderRef.deviceModel?.trim()) errors.push('Si hay costo, indicá el modelo del equipo.');
+
+    if (errors.length > 0) {
+      showToast('Corregí los errores', errors.join(' '), 'error');
       return;
     }
 
-    await syncRepairToDb(id, orderRef);
-    refetchLogs();
-    showToast('¡Guardado Perfecto!', `Orden de servicio #${orderRef.id} actualizada correctamente.`, 'success');
+    if (id === DRAFT_ID) {
+      // Insert new repair into DB
+      const { data: { user } } = await supabase.auth.getUser();
+      const payload: Record<string, unknown> = {
+        client_name: draftRepair.clientName,
+        client_phone: draftRepair.clientPhone,
+        client_email: draftRepair.clientEmail,
+        device_brand: draftRepair.deviceBrand,
+        device_model: draftRepair.deviceModel,
+        device_serial: draftRepair.deviceSerial,
+        device_password: draftRepair.devicePassword,
+        device_color: draftRepair.deviceColor,
+        powers_on: draftRepair.powersOn,
+        battery_percent: draftRepair.batteryPercent,
+        charger_left: draftRepair.chargerLeft,
+        cover_left: draftRepair.coverLeft,
+        receiving_condition: draftRepair.receivingCondition,
+        problem_reported: draftRepair.problemReported,
+        status: draftRepair.status,
+        technician: draftRepair.technician,
+        delivery_date: draftRepair.deliveryDate,
+        warranty_end: draftRepair.warrantyEnd,
+        total_cost: draftRepair.totalCost,
+        advance_paid: draftRepair.advancePaid,
+        footnote: draftRepair.footnote,
+        created_by: user?.id ?? null,
+      };
+      const { data: row, error: err } = await supabase
+        .from('repair_orders')
+        .insert(payload)
+        .select()
+        .single();
+
+      if (err || !row) {
+        showToast('Error', 'No se pudo guardar la orden.', 'error');
+        return;
+      }
+
+      const newRepair: RepairOrder = {
+        id: String(row.id),
+        clientName: draftRepair.clientName,
+        clientPhone: draftRepair.clientPhone,
+        clientEmail: draftRepair.clientEmail,
+        deviceBrand: draftRepair.deviceBrand,
+        deviceModel: draftRepair.deviceModel,
+        deviceSerial: draftRepair.deviceSerial,
+        devicePassword: draftRepair.devicePassword,
+        deviceColor: draftRepair.deviceColor,
+        powersOn: draftRepair.powersOn,
+        batteryPercent: draftRepair.batteryPercent,
+        chargerLeft: draftRepair.chargerLeft,
+        coverLeft: draftRepair.coverLeft,
+        receivingCondition: draftRepair.receivingCondition,
+        problemReported: draftRepair.problemReported,
+        status: draftRepair.status,
+        technician: draftRepair.technician,
+        deliveryDate: draftRepair.deliveryDate,
+        warrantyEnd: draftRepair.warrantyEnd,
+        totalCost: draftRepair.totalCost,
+        advancePaid: draftRepair.advancePaid,
+        remainingBalance: Math.max(0, draftRepair.totalCost - draftRepair.advancePaid),
+        footnote: draftRepair.footnote,
+        createdAt: row.created_at,
+      };
+
+      setRepairs(prev => [newRepair, ...prev]);
+      setSelectedRepairId(newRepair.id);
+      refetchLogs();
+      showToast('Nota Guardada', `Folio #${newRepair.id} asignado correctamente.`, 'success');
+    } else {
+      // Update existing repair
+      await syncRepairToDb(id, orderRef);
+      refetchLogs();
+      showToast('Nota Actualizada', `Orden #${orderRef.id} guardada correctamente.`, 'success');
+    }
   };
 
   // Perform delete on selected repair
   const handleDeleteCurrentRepair = async () => {
+    if (selectedRepairId === DRAFT_ID) {
+      setDraftRepair(blankRepair());
+      setSelectedRepairId(repairs.length > 0 ? repairs[0].id : '');
+      showToast('Borrador descartado', 'La nota nueva se ha descartado.', 'info');
+      return;
+    }
     if (confirm(`¿Seguro que deseas eliminar permanentemente el folio #${selectedRepairId}?`)) {
       await removeRepairFromDb(selectedRepairId);
       setRepairs(prev => prev.filter(r => r.id !== selectedRepairId));
@@ -258,20 +366,24 @@ export default function App() {
 
   // Clear loaded fields in Repairs
   const handleClearRepairForm = () => {
-    handleUpdateRepair(selectedRepairId, {
-      clientName: '',
-      clientPhone: '',
-      clientEmail: '',
-      deviceModel: '',
-      deviceSerial: '',
-      devicePassword: '',
-      deviceColor: '',
-      receivingCondition: '',
-      problemReported: '',
-      totalCost: 0,
-      advancePaid: 0,
-      remainingBalance: 0
-    });
+    if (selectedRepairId === DRAFT_ID) {
+      setDraftRepair(blankRepair());
+    } else {
+      handleUpdateRepair(selectedRepairId, {
+        clientName: '',
+        clientPhone: '',
+        clientEmail: '',
+        deviceModel: '',
+        deviceSerial: '',
+        devicePassword: '',
+        deviceColor: '',
+        receivingCondition: '',
+        problemReported: '',
+        totalCost: 0,
+        advancePaid: 0,
+        remainingBalance: 0
+      });
+    }
     showToast('Campos Limpiados', 'La forma actual se ha restablecido en blanco.', 'info');
   };
 
@@ -464,6 +576,13 @@ export default function App() {
                 serviciosModalOpen={serviciosModalOpen}
                 onSetServiciosModalOpen={setServiciosModalOpen}
                 onDeleteCompletedRepairs={handleDeleteCompletedRepairs}
+                draftRepair={draftRepair}
+                draftId={DRAFT_ID}
+                onSelectRepair={(id: string) => {
+                  setSelectedRepairId(id);
+                  setCurrentView('repairs');
+                  setServiciosModalOpen(false);
+                }}
               />
             )}
 

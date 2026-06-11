@@ -30,6 +30,9 @@ interface RepairsViewProps {
   serviciosModalOpen: boolean;
   onSetServiciosModalOpen: (open: boolean) => void;
   onDeleteCompletedRepairs: (count: number) => Promise<void>;
+  draftRepair: RepairOrder;
+  draftId: string;
+  onSelectRepair: (id: string) => void;
 }
 
 export default function RepairsView({
@@ -44,15 +47,19 @@ export default function RepairsView({
   serviciosModalOpen,
   onSetServiciosModalOpen,
   onDeleteCompletedRepairs,
+  draftRepair,
+  draftId,
+  onSelectRepair,
 }: RepairsViewProps) {
   // Local modals
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Find active loaded repair
+  // Find active loaded repair (draft or existing)
   const activeRepair = useMemo(() => {
+    if (selectedId === draftId) return draftRepair;
     return repairs.find((r) => r.id === selectedId) || repairs[0];
-  }, [repairs, selectedId]);
+  }, [repairs, selectedId, draftId, draftRepair]);
 
   // Handle live calculation of remaining balance
   const remainingCalculated = useMemo(() => {
@@ -867,6 +874,7 @@ export default function RepairsView({
         onClose={() => onSetServiciosModalOpen(false)}
         repairs={repairs}
         onDeleteCompletedRepairs={onDeleteCompletedRepairs}
+        onSelectRepair={onSelectRepair}
       />
     </div>
   );

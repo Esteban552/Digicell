@@ -13,6 +13,7 @@ interface ServiciosModalProps {
   onClose: () => void;
   repairs: RepairOrder[];
   onDeleteCompletedRepairs: (count: number) => Promise<void>;
+  onSelectRepair: (id: string) => void;
 }
 
 function formatDate(dateStr: string) {
@@ -40,7 +41,7 @@ function todayStr() {
     String(d.getDate()).padStart(2, '0');
 }
 
-export default function ServiciosModal({ open, onClose, repairs, onDeleteCompletedRepairs }: ServiciosModalProps) {
+export default function ServiciosModal({ open, onClose, repairs, onDeleteCompletedRepairs, onSelectRepair }: ServiciosModalProps) {
   const [search, setSearch] = useState('');
   const [filterDate, setFilterDate] = useState(todayStr());
 
@@ -139,7 +140,8 @@ export default function ServiciosModal({ open, onClose, repairs, onDeleteComplet
               {filtered.map(r => (
                 <div
                   key={r.id}
-                  className="border border-outline-variant rounded-lg p-4 hover:bg-surface-container-low transition-colors"
+                  className="border border-outline-variant rounded-lg p-4 hover:bg-surface-container-low hover:border-primary transition-all cursor-pointer"
+                  onClick={() => { onSelectRepair(r.id); onClose(); }}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
