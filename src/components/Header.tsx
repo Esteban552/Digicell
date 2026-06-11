@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { ActiveView } from '../types';
 
 interface HeaderProps {
@@ -16,6 +16,9 @@ interface HeaderProps {
   onDeleteCurrentRepair: () => void;
   onReprintCurrentRepair: () => void;
   onClearRepairForm: () => void;
+  onOpenServiciosModal: () => void;
+  onJumpToRepair: (folio: number) => void;
+  currentRepairId: string;
 }
 
 export default function Header({
@@ -27,8 +30,13 @@ export default function Header({
   onCreateNewRepair,
   onDeleteCurrentRepair,
   onReprintCurrentRepair,
-  onClearRepairForm
+  onClearRepairForm,
+  onOpenServiciosModal,
+  onJumpToRepair,
+  currentRepairId
 }: HeaderProps) {
+  const [folioInput, setFolioInput] = useState('');
+
   if (activeView === 'login') return null;
 
   return (
@@ -61,6 +69,44 @@ export default function Header({
             Reimprimir Comprobante
           </button>
           
+          {/* Jump-to folio input */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (folioInput.trim()) {
+                onJumpToRepair(Number(folioInput));
+                setFolioInput('');
+              }
+            }}
+            className="contents"
+          >
+            <div className="flex items-center border border-outline rounded overflow-hidden h-8">
+              <span className="text-[11px] font-bold font-sans text-on-surface-variant px-2 select-none">Folio</span>
+              <input
+                type="number"
+                value={folioInput}
+                onChange={(e) => setFolioInput(e.target.value)}
+                placeholder={currentRepairId || '#'}
+                className="w-14 h-full border-none outline-none text-xs font-sans font-semibold px-1 text-center"
+                min="1"
+              />
+              <button
+                type="submit"
+                className="h-full px-1.5 bg-primary text-white text-[10px] font-bold font-sans hover:opacity-90 transition-all outline-none cursor-pointer flex items-center"
+              >
+                <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+              </button>
+            </div>
+          </form>
+
+          <button
+            onClick={onOpenServiciosModal}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-tertiary text-white text-xs font-semibold rounded hover:opacity-90 shadow-sm transition-all cursor-pointer outline-none shrink-0"
+          >
+            <span className="material-symbols-outlined text-[16px]">list_alt</span>
+            Servicios
+          </button>
+
           <button
             onClick={onClearRepairForm}
             className="flex items-center gap-1.5 px-3.5 py-1.5 border border-outline text-on-surface text-xs font-semibold rounded hover:bg-slate-50 transition-colors cursor-pointer outline-none shrink-0"

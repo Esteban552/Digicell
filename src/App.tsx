@@ -87,6 +87,7 @@ export default function App() {
     create: createRepairInDb,
     update: syncRepairToDb,
     remove: removeRepairFromDb,
+    refetch: refetchRepairs,
   } = useRepairOrders();
 
   // Local mirror for instant form editing — syncs from DB on load
@@ -113,6 +114,7 @@ export default function App() {
   // Search parameters
   const [searchQuery, setSearchQuery] = useState('');
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [serviciosModalOpen, setServiciosModalOpen] = useState(false);
 
   // Global Toast notification state
   const [toastMessage, setToastMessage] = useState<{
@@ -206,6 +208,53 @@ export default function App() {
   const handleReprintCurrentRepair = () => {
     showToast('Reimprimir Comprobante', `Generando ticket de carga térmica para folio #${selectedRepairId}...`, 'info');
   };
+
+  // Jump to a repair by its folio number
+  const handleJumpToRepair = useCallback((folioNumber: number) => {
+    let target: RepairOrder | undefined;
+    for (const r of repairs) {
+      if (Number(r.id) === folioNumber || r.id === String(folioNumber)) {
+        target = r;
+        break;
+      }
+    }
+    if (target) {
+      setSelectedRepairId(target.id);
+      setCurrentView('repairs');
+      showToast('Orden encontrada', `Folio #${folioNumber} cargado.`, 'success');
+    } else {
+      showToast('No encontrada', `No existe orden con folio #${folioNumber}.`, 'error');
+    }
+  }, [repairs, showToast]);
+
+  // Bulk-delete completed (delivered) repair orders
+  const handleDeleteCompletedRepairs = useCallback(async (count: number) => {
+    const { data: toDelete, error: fetchErr } = await supabase
+      .from('repair_orders')
+      .select('id')
+      .eq('status', 'delivered')
+      .order('created_at', { ascending: false })
+      .limit(count);
+
+    if (fetchErr || !toDelete || toDelete.length === 0) {
+      showToast('Error', 'No se pudieron obtener las órdenes a eliminar.', 'error');
+      return;
+    }
+
+    const ids = toDelete.map(r => r.id);
+    const { error: delErr } = await supabase
+      .from('repair_orders')
+      .delete()
+      .in('id', ids);
+
+    if (delErr) {
+      showToast('Error', 'No se pudieron eliminar las órdenes.', 'error');
+      return;
+    }
+
+    await refetchRepairs();
+    showToast('Órdenes eliminadas', `Se eliminaron ${ids.length} órdenes entregadas.`, 'success');
+  }, [showToast, refetchRepairs]);
 
   // Clear loaded fields in Repairs
   const handleClearRepairForm = () => {
@@ -366,6 +415,9 @@ export default function App() {
           onDeleteCurrentRepair={handleDeleteCurrentRepair}
           onReprintCurrentRepair={handleReprintCurrentRepair}
           onClearRepairForm={handleClearRepairForm}
+          onOpenServiciosModal={() => setServiciosModalOpen(true)}
+          onJumpToRepair={handleJumpToRepair}
+          currentRepairId={selectedRepairId}
         />
 
         {/* Dynamic page routes rendering canvas */}
@@ -409,6 +461,9 @@ export default function App() {
                 showToast={showToast}
                 searchModalOpen={searchModalOpen}
                 onSetSearchModalOpen={setSearchModalOpen}
+                serviciosModalOpen={serviciosModalOpen}
+                onSetServiciosModalOpen={setServiciosModalOpen}
+                onDeleteCompletedRepairs={handleDeleteCompletedRepairs}
               />
             )}
 
