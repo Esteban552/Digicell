@@ -369,22 +369,8 @@ export default function App() {
     if (selectedRepairId === DRAFT_ID) {
       setDraftRepair(blankRepair());
     } else {
-      handleUpdateRepair(selectedRepairId, {
-        clientName: '',
-        clientPhone: '',
-        clientEmail: '',
-        deviceModel: '',
-        deviceSerial: '',
-        devicePassword: '',
-        deviceColor: '',
-        receivingCondition: '',
-        problemReported: '',
-        totalCost: 0,
-        advancePaid: 0,
-        remainingBalance: 0
-      });
+      handleCreateNewRepair();
     }
-    showToast('Campos Limpiados', 'La forma actual se ha restablecido en blanco.', 'info');
   };
 
   // Complete point-of-sale transaction

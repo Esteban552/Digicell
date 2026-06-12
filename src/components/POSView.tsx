@@ -3,6 +3,16 @@ import type { CartItem } from '../types';
 import type { Product } from '../lib/supabase-types';
 import InventoryPanel from './InventoryPanel';
 
+function onlyText(v: string) {
+  return v.replace(/[0-9]/g, '');
+}
+
+function getCartQtyForProduct(cart: CartItem[], productId: number) {
+  return cart
+    .filter(i => i.productId === productId)
+    .reduce((sum, i) => sum + i.qty, 0);
+}
+
 interface POSViewProps {
   cart: CartItem[];
   onSetCart: (cart: CartItem[] | ((p: CartItem[]) => CartItem[])) => void;
@@ -28,6 +38,9 @@ export default function POSView({
   const [itemPrice, setItemPrice] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<number | undefined>(undefined);
+  const [nameError, setNameError] = useState('');
+  const [qtyError, setQtyError] = useState('');
+  const [priceError, setPriceError] = useState('');
 
   // Tab state
   const [activeTab, setActiveTab] = useState<'venta' | 'inventario'>('venta');
@@ -45,6 +58,15 @@ export default function POSView({
   const [cashMoveType, setCashMoveType] = useState<'in' | 'out'>('in');
   const [cashMoveAmount, setCashMoveAmount] = useState('');
   const [cashMoveNote, setCashMoveNote] = useState('');
+
+  // Stock validation helper
+  const stockInfo = useMemo(() => {
+    if (!selectedProductId) return { stock: Infinity, inCart: 0, available: Infinity };
+    const product = products.find(p => p.id === selectedProductId);
+    if (!product) return { stock: Infinity, inCart: 0, available: Infinity };
+    const inCart = getCartQtyForProduct(cart, selectedProductId);
+    return { stock: product.stock, inCart, available: product.stock - inCart };
+  }, [selectedProductId, products, cart]);
 
   // Auto-suggestions calculation
   const suggestions = useMemo(() => {
@@ -82,8 +104,31 @@ export default function POSView({
   // Add Item
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!itemName?.trim()) return;
+    let hasError = false;
+
+    if (!itemName?.trim()) {
+      setNameError('El nombre del producto es obligatorio');
+      hasError = true;
+    } else {
+      setNameError('');
+    }
+
     const finalPrice = Math.max(0, Number(itemPrice) || 0);
+    if (finalPrice <= 0) {
+      setPriceError('El precio debe ser mayor a 0');
+      hasError = true;
+    } else {
+      setPriceError('');
+    }
+
+    if (selectedProductId && itemQty > stockInfo.available) {
+      setQtyError(`Stock insuficiente: solo hay ${stockInfo.available} disponibles (${stockInfo.inCart} en carro de ${stockInfo.stock})`);
+      hasError = true;
+    } else {
+      setQtyError('');
+    }
+
+    if (hasError) return;
     const finalQty = Math.max(1, itemQty || 1);
 
     onSetCart((prev) => {
@@ -108,6 +153,7 @@ export default function POSView({
     setItemPrice('');
     setItemQty(1);
     setSelectedProductId(undefined);
+    setQtyError('');
     showToast('Artículo agregado', 'Se colocó en el carro de venta actual.', 'info');
   };
 
@@ -121,7 +167,14 @@ export default function POSView({
   const handleChangeQty = (id: string, dir: 'up' | 'down') => {
     onSetCart(prev => prev.map(item => {
       if (item.id === id) {
-        const nextQty = dir === 'up' ? item.qty + 1 : Math.max(1, item.qty - 1);
+        let nextQty = dir === 'up' ? item.qty + 1 : Math.max(1, item.qty - 1);
+        if (dir === 'up' && item.productId) {
+          const product = products.find(p => p.id === item.productId);
+          if (product && nextQty > product.stock) {
+            showToast('Stock insuficiente', `Solo hay ${product.stock} disponibles de "${item.name}".`, 'error');
+            nextQty = item.qty;
+          }
+        }
         return { ...item, qty: nextQty };
       }
       return item;
@@ -155,6 +208,12 @@ export default function POSView({
     const cash = Math.max(0, Number(cashLocal) || 0);
     const card = Math.max(0, Number(cardLocal) || 0);
     const usd = Math.max(0, Number(cashUsd) || 0);
+    const usdValue = usd * 18.50;
+    const sumPay = cash + card + usdValue;
+    if (sumPay < total) {
+      showToast('Pago insuficiente', `Faltan $${(total - sumPay).toFixed(2)} para cubrir el total.`, 'error');
+      return;
+    }
     onCompleteCheckout(cash, card, usd);
     closePayModal();
   };
@@ -220,13 +279,20 @@ export default function POSView({
                   <input
                     type="text"
                     value={itemName}
-                    onChange={(e) => { setItemName(e.target.value); setShowSuggestions(true); }}
+                    onChange={(e) => {
+                      setItemName(e.target.value);
+                      setNameError('');
+                      setShowSuggestions(true);
+                    }}
                     onFocus={() => setShowSuggestions(true)}
                     onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                     placeholder="Nombre del producto"
-                    className="h-10 w-full border border-outline rounded px-3 focus:border-tertiary outline-none text-sm font-sans"
+                    className={`h-10 w-full border ${nameError ? 'border-error' : 'border-outline'} rounded px-3 focus:border-tertiary outline-none text-sm font-sans`}
                     autoComplete="off"
                   />
+                  {nameError && (
+                    <p className="text-[10px] font-sans text-error font-semibold mt-0.5">{nameError}</p>
+                  )}
                   {/* Suggestions dropdown */}
                   {showSuggestions && suggestions.length > 0 && (
                     <div className="absolute left-0 top-full mt-1 w-full bg-white border border-outline-variant rounded-md shadow-lg z-20">
@@ -248,21 +314,39 @@ export default function POSView({
                   <input
                     type="number"
                     value={itemQty || ''}
-                    onChange={(e) => setItemQty(Math.max(1, Number(e.target.value) || 1))}
+                    onChange={(e) => {
+                      const raw = Number(e.target.value);
+                      const val = Math.max(1, raw || 1);
+                      setItemQty(val);
+                      if (selectedProductId && val > stockInfo.available) {
+                        setQtyError(`Stock disponible: ${stockInfo.available} (${stockInfo.inCart} en carro de ${stockInfo.stock})`);
+                      } else {
+                        setQtyError('');
+                      }
+                    }}
                     placeholder="Cant."
-                    className="h-10 w-full border border-outline rounded px-3 focus:border-tertiary outline-none text-sm font-sans"
+                    className={`h-10 w-full border ${qtyError ? 'border-error' : 'border-outline'} rounded px-3 focus:border-tertiary outline-none text-sm font-sans`}
                     min="1"
                   />
+                  {qtyError && (
+                    <p className="text-[10px] font-sans text-error font-semibold mt-0.5">{qtyError}</p>
+                  )}
                 </div>
                 <div>
                   <input
                     type="number"
                     value={itemPrice}
-                    onChange={(e) => setItemPrice(e.target.value)}
+                    onChange={(e) => {
+                      setItemPrice(e.target.value);
+                      setPriceError('');
+                    }}
                     placeholder="$ Precio"
-                    className="h-10 w-full border border-outline rounded px-3 focus:border-tertiary outline-none text-sm font-sans"
+                    className={`h-10 w-full border ${priceError ? 'border-error' : 'border-outline'} rounded px-3 focus:border-tertiary outline-none text-sm font-sans`}
                     step="0.01"
                   />
+                  {priceError && (
+                    <p className="text-[10px] font-sans text-error font-semibold mt-0.5">{priceError}</p>
+                  )}
                 </div>
                 <div>
                   <button
@@ -284,22 +368,34 @@ export default function POSView({
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {products.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => {
-                        setItemName(p.name);
-                      setItemPrice(String(p.price));
-                      setSelectedProductId(p.id);
-                      }}
-                      className="border border-outline-variant rounded-md p-3 text-left hover:bg-surface-container-low hover:border-primary transition-all cursor-pointer outline-none"
-                    >
-                      <h4 className="text-xs font-bold text-on-surface truncate font-sans">{p.name}</h4>
-                      <p className="font-sans text-tertiary font-bold text-xs mt-1">${p.price.toFixed(2)}</p>
-                      <p className="text-[10px] font-sans text-on-surface-variant mt-0.5">{p.category}</p>
-                      <p className="text-[10px] font-sans text-on-surface-variant">{p.stock > 0 ? `${p.stock} en stock` : 'Sin stock'}</p>
-                    </button>
-                  ))}
+                  {products.map(p => {
+                    const outOfStock = p.stock <= 0;
+                    const inCart = getCartQtyForProduct(cart, p.id);
+                    const remaining = p.stock - inCart;
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          if (outOfStock) {
+                            showToast('Sin stock', `"${p.name}" no tiene unidades disponibles.`, 'error');
+                            return;
+                          }
+                          setItemName(p.name);
+                          setItemPrice(String(p.price));
+                          setSelectedProductId(p.id);
+                          setQtyError('');
+                        }}
+                        className={`border rounded-md p-3 text-left transition-all outline-none ${outOfStock ? 'border-error/30 opacity-50 cursor-not-allowed' : 'border-outline-variant hover:bg-surface-container-low hover:border-primary cursor-pointer'}`}
+                      >
+                        <h4 className="text-xs font-bold text-on-surface truncate font-sans">{p.name}</h4>
+                        <p className="font-sans text-tertiary font-bold text-xs mt-1">${p.price.toFixed(2)}</p>
+                        <p className="text-[10px] font-sans text-on-surface-variant mt-0.5">{p.category}</p>
+                        <p className={`text-[10px] font-sans ${remaining <= 0 ? 'text-error font-bold' : p.stock <= 5 ? 'text-orange-500 font-semibold' : 'text-on-surface-variant'}`}>
+                          {outOfStock ? 'Sin stock' : remaining === p.stock ? `${p.stock} en stock` : `${remaining} disp. (${inCart} en carro)`}
+                        </p>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

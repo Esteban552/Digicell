@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo } from "react";
-import { RepairOrder, RepairStatus } from "../types";
+import type { RepairOrder, RepairStatus } from "../types";
 import ServiciosModal from "./ServiciosModal";
 
 const repairStatusLabels: Record<string, string> = {
@@ -54,6 +54,9 @@ export default function RepairsView({
   // Local modals
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Is this a new draft (editable) or an existing saved repair (read-only)?
+  const isDraft = selectedId === draftId;
 
   // Find active loaded repair (draft or existing)
   const activeRepair = useMemo(() => {
@@ -109,6 +112,7 @@ export default function RepairsView({
   };
 
   const handleUpdateField = (key: keyof RepairOrder, value: any) => {
+    if (!isDraft) return;
     onUpdateRepair(activeRepair.id, { [key]: value });
   };
 
@@ -128,6 +132,7 @@ export default function RepairsView({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* LEFT COLUMN (Span 8) */}
         <div className="lg:col-span-8 flex flex-col gap-6">
+          <fieldset disabled={!isDraft} className="border-0 p-0 m-0 min-w-0">
           {/* Section: Customer Details */}
           <div className="bg-white border border-outline-variant rounded-md p-5 select-none hover:shadow-sm transition-all shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
             <h3 className="text-sm font-bold text-on-surface border-b border-outline-variant/60 pb-3 mb-4 flex items-center gap-2">
@@ -148,11 +153,12 @@ export default function RepairsView({
                   <input
                     type="tel"
                     value={activeRepair.clientPhone}
+                    readOnly={!isDraft}
                     onChange={(e) =>
                       handleUpdateField("clientPhone", e.target.value)
                     }
                     placeholder="(555) 000-0000"
-                    className="h-10 w-full pl-9 pr-3 border border-outline-variant rounded bg-white text-xs text-on-surface focus:border-tertiary outline-none transition-all font-sans"
+                    className="h-10 w-full pl-9 pr-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none transition-all font-sans"
                   />
                 </div>
               </div>
@@ -164,11 +170,12 @@ export default function RepairsView({
                 <input
                   type="text"
                   value={activeRepair.clientName}
+                  readOnly={!isDraft}
                   onChange={(e) =>
                     handleUpdateField("clientName", e.target.value)
                   }
                   placeholder="Juan Pérez"
-                  className="h-10 w-full px-3 border border-outline-variant rounded bg-white text-xs text-on-surface focus:border-tertiary outline-none transition-all font-sans font-medium"
+                  className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none transition-all font-sans font-medium"
                 />
               </div>
 
@@ -179,16 +186,19 @@ export default function RepairsView({
                 <input
                   type="email"
                   value={activeRepair.clientEmail}
+                  readOnly={!isDraft}
                   onChange={(e) =>
                     handleUpdateField("clientEmail", e.target.value)
                   }
                   placeholder="cliente@correo.com"
-                  className="h-10 w-full px-3 border border-outline-variant rounded bg-white text-xs text-on-surface focus:border-tertiary outline-none transition-all font-sans"
+                  className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none transition-all font-sans"
                 />
               </div>
             </div>
           </div>
+          </fieldset>
 
+          <fieldset disabled={!isDraft} className="border-0 p-0 m-0 min-w-0">
           {/* Section: Device Information */}
           <div className="bg-white border border-outline-variant rounded-md p-5 select-none hover:shadow-sm transition-all shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
             <h3 className="text-sm font-bold text-on-surface border-b border-outline-variant/60 pb-3 mb-4 flex items-center gap-2">
@@ -203,11 +213,12 @@ export default function RepairsView({
                   Marca
                 </label>
                 <select
+                  disabled={!isDraft}
                   value={activeRepair.deviceBrand}
                   onChange={(e) =>
                     handleUpdateField("deviceBrand", e.target.value)
                   }
-                  className="h-10 w-full px-2.5 border border-outline-variant rounded bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans cursor-pointer"
+                  className="h-10 w-full px-2.5 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans cursor-pointer"
                 >
                   <option value="Apple">Apple</option>
                   <option value="Samsung">Samsung</option>
@@ -225,11 +236,12 @@ export default function RepairsView({
                 <input
                   type="text"
                   value={activeRepair.deviceModel}
+                  readOnly={!isDraft}
                   onChange={(e) =>
                     handleUpdateField("deviceModel", e.target.value)
                   }
                   placeholder="Ej: iPhone 13 Pro"
-                  className="h-10 w-full px-3 border border-outline-variant rounded bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans font-medium"
+                  className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans font-medium"
                 />
               </div>
 
@@ -240,11 +252,12 @@ export default function RepairsView({
                 <input
                   type="text"
                   value={activeRepair.deviceSerial}
+                  readOnly={!isDraft}
                   onChange={(e) =>
                     handleUpdateField("deviceSerial", e.target.value)
                   }
                   placeholder="15 Digits"
-                  className="h-10 w-full px-3 border border-outline-variant rounded bg-white text-xs text-on-surface font-mono focus:border-tertiary outline-none font-sans"
+                  className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface font-mono focus:border-tertiary outline-none font-sans"
                 />
               </div>
 
@@ -255,11 +268,12 @@ export default function RepairsView({
                 <input
                   type="text"
                   value={activeRepair.devicePassword}
+                  readOnly={!isDraft}
                   onChange={(e) =>
                     handleUpdateField("devicePassword", e.target.value)
                   }
                   placeholder="PIN/Patrón"
-                  className="h-10 w-full px-3 border border-outline-variant rounded bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans"
+                  className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans"
                 />
               </div>
 
@@ -270,16 +284,19 @@ export default function RepairsView({
                 <input
                   type="text"
                   value={activeRepair.deviceColor}
+                  readOnly={!isDraft}
                   onChange={(e) =>
                     handleUpdateField("deviceColor", e.target.value)
                   }
                   placeholder="Ej: Graphite / Space Grey"
-                  className="h-10 w-full px-3 border border-outline-variant rounded bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans"
+                  className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans"
                 />
               </div>
             </div>
           </div>
+          </fieldset>
 
+          <fieldset disabled={!isDraft} className="border-0 p-0 m-0 min-w-0">
           {/* Section: Intake Checklist */}
           <div className="bg-white border border-outline-variant rounded-md p-5 select-none hover:shadow-sm transition-all shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
             <h3 className="text-sm font-bold text-on-surface border-b border-outline-variant/60 pb-3 mb-4 flex items-center gap-2">
@@ -294,11 +311,12 @@ export default function RepairsView({
                   ¿Enciende?
                 </label>
                 <select
+                  disabled={!isDraft}
                   value={activeRepair.powersOn}
                   onChange={(e) =>
                     handleUpdateField("powersOn", e.target.value)
                   }
-                  className="h-10 w-full px-2.5 border border-outline-variant rounded bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans cursor-pointer font-semibold"
+                  className="h-10 w-full px-2.5 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans cursor-pointer font-semibold"
                 >
                   <option value="Yes">Sí</option>
                   <option value="No">No</option>
@@ -312,11 +330,12 @@ export default function RepairsView({
                 <input
                   type="text"
                   value={activeRepair.batteryPercent}
+                  readOnly={!isDraft}
                   onChange={(e) =>
                     handleUpdateField("batteryPercent", e.target.value)
                   }
                   placeholder="0-100"
-                  className="h-10 w-full px-3 border border-outline-variant rounded bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans"
+                  className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans"
                 />
               </div>
 
@@ -324,11 +343,12 @@ export default function RepairsView({
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
+                    disabled={!isDraft}
                     checked={activeRepair.chargerLeft}
                     onChange={(e) =>
                       handleUpdateField("chargerLeft", e.target.checked)
                     }
-                    className="w-4.5 h-4.5 rounded border-outline-variant text-primary focus:ring-0 accent-primary cursor-pointer border"
+                    className="w-4.5 h-4.5 rounded border-outline-variant text-primary focus:ring-0 accent-primary disabled:opacity-50 cursor-pointer border"
                   />
                   <span className="text-xs font-semibold text-on-surface font-sans">
                     ¿Cargador Incluido?
@@ -340,11 +360,12 @@ export default function RepairsView({
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
+                    disabled={!isDraft}
                     checked={activeRepair.coverLeft}
                     onChange={(e) =>
                       handleUpdateField("coverLeft", e.target.checked)
                     }
-                    className="w-4.5 h-4.5 rounded border-outline-variant text-primary focus:ring-0 accent-primary cursor-pointer border"
+                    className="w-4.5 h-4.5 rounded border-outline-variant text-primary focus:ring-0 accent-primary disabled:opacity-50 cursor-pointer border"
                   />
                   <span className="text-xs font-semibold text-on-surface font-sans">
                     ¿Funda Incluida?
@@ -353,7 +374,9 @@ export default function RepairsView({
               </div>
             </div>
           </div>
+          </fieldset>
 
+          <fieldset disabled={!isDraft} className="border-0 p-0 m-0 min-w-0">
           {/* Section: Service Details (textareas) */}
           <div className="bg-white border border-outline-variant rounded-md p-5 select-none hover:shadow-sm transition-all shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
             <h3 className="text-sm font-bold text-on-surface border-b border-outline-variant/60 pb-3 mb-4 flex items-center gap-2">
@@ -368,12 +391,13 @@ export default function RepairsView({
                   Condiciones de Recepción
                 </label>
                 <textarea
+                  readOnly={!isDraft}
                   value={activeRepair.receivingCondition}
                   onChange={(e) =>
                     handleUpdateField("receivingCondition", e.target.value)
                   }
                   placeholder="Detalle de condiciones físicas..."
-                  className="w-full border border-outline-variant rounded bg-white text-xs text-on-surface p-3 h-24 focus:border-tertiary outline-none resize-none leading-relaxed font-sans"
+                  className="w-full border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface p-3 h-24 focus:border-tertiary outline-none resize-none leading-relaxed font-sans"
                 />
               </div>
 
@@ -382,20 +406,23 @@ export default function RepairsView({
                   Detalle del Problema Reportado
                 </label>
                 <textarea
+                  readOnly={!isDraft}
                   value={activeRepair.problemReported}
                   onChange={(e) =>
                     handleUpdateField("problemReported", e.target.value)
                   }
                   placeholder="Detalle de la falla y trabajo requerido..."
-                  className="w-full border border-outline-variant rounded bg-white text-xs text-on-surface p-3 h-24 focus:border-tertiary outline-none resize-none leading-relaxed font-sans font-medium"
+                  className="w-full border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface p-3 h-24 focus:border-tertiary outline-none resize-none leading-relaxed font-sans font-medium"
                 />
               </div>
             </div>
           </div>
+          </fieldset>
         </div>
 
         {/* RIGHT COLUMN (Span 4) */}
         <div className="lg:col-span-4 flex flex-col gap-6">
+          <fieldset disabled={!isDraft} className="border-0 p-0 m-0 min-w-0 space-y-4">
           {/* Section: Management status dropdowns */}
           <div className="bg-white border border-outline-variant rounded-md p-5 select-none hover:shadow-sm transition-all shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
             <h3 className="text-sm font-bold text-on-surface border-b border-outline-variant/60 pb-3 mb-4 flex items-center gap-2 flex-wrap">
@@ -410,11 +437,12 @@ export default function RepairsView({
                   Estado
                 </label>
                 <select
+                  disabled={!isDraft}
                   value={activeRepair.status}
                   onChange={(e) =>
                     handleUpdateField("status", e.target.value as RepairStatus)
                   }
-                  className="h-10 w-full px-2.5 border border-outline-variant rounded bg-white text-xs font-bold text-primary focus:border-tertiary outline-none cursor-pointer font-sans"
+                  className="h-10 w-full px-2.5 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs font-bold text-primary focus:border-tertiary outline-none cursor-pointer font-sans"
                 >
                   <option value="in_review">En Revisión</option>
                   <option value="waiting_parts">Esperando Piezas</option>
@@ -428,11 +456,12 @@ export default function RepairsView({
                   Técnico Asignado
                 </label>
                 <select
+                  disabled={!isDraft}
                   value={activeRepair.technician}
                   onChange={(e) =>
                     handleUpdateField("technician", e.target.value)
                   }
-                  className="h-10 w-full px-2.5 border border-outline-variant rounded bg-white text-xs text-on-surface focus:border-tertiary outline-none cursor-pointer font-sans font-medium"
+                  className="h-10 w-full px-2.5 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none cursor-pointer font-sans font-medium"
                 >
                   <option value="Unassigned">Sin Asignar</option>
                   <option value="Tech Alex">Tech Alex</option>
@@ -447,10 +476,11 @@ export default function RepairsView({
                 <input
                   type="date"
                   value={activeRepair.deliveryDate}
+                  readOnly={!isDraft}
                   onChange={(e) =>
                     handleUpdateField("deliveryDate", e.target.value)
                   }
-                  className="h-10 w-full px-3 border border-outline-variant rounded bg-white text-xs font-medium text-on-surface focus:border-tertiary outline-none font-sans"
+                  className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs font-medium text-on-surface focus:border-tertiary outline-none font-sans"
                 />
               </div>
 
@@ -461,15 +491,18 @@ export default function RepairsView({
                 <input
                   type="date"
                   value={activeRepair.warrantyEnd}
+                  readOnly={!isDraft}
                   onChange={(e) =>
                     handleUpdateField("warrantyEnd", e.target.value)
                   }
-                  className="h-10 w-full px-3 border border-outline-variant rounded bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans"
+                  className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans"
                 />
               </div>
             </div>
           </div>
+          </fieldset>
 
+          <fieldset disabled={!isDraft} className="border-0 p-0 m-0 min-w-0 space-y-4">
           {/* Section: Financial cost metrics logs */}
           <div className="bg-white border border-outline-variant rounded-md p-5 select-none hover:shadow-sm transition-all shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
             <h3 className="text-sm font-bold text-on-surface border-b border-outline-variant/60 pb-3 mb-4 flex items-center gap-2">
@@ -490,11 +523,13 @@ export default function RepairsView({
                   <input
                     type="number"
                     min="0"
+                    readOnly={!isDraft}
                     placeholder="0.00"
                     value={
                       activeRepair.totalCost === 0 ? "" : activeRepair.totalCost
                     }
                     onChange={(e) => {
+                      if (!isDraft) return;
                       const costVal = Math.max(0, Number(e.target.value) || 0);
                       onUpdateRepair(activeRepair.id, {
                         totalCost: costVal,
@@ -504,7 +539,7 @@ export default function RepairsView({
                         ),
                       });
                     }}
-                    className="h-10 w-full pl-6 pr-3 border border-outline-variant rounded bg-[#ffffff] text-right text-xs font-mono font-medium focus:border-tertiary outline-none"
+                    className="h-10 w-full pl-6 pr-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-[#ffffff] text-right text-xs font-mono font-medium focus:border-tertiary outline-none"
                   />
                 </div>
               </div>
@@ -520,6 +555,7 @@ export default function RepairsView({
                   <input
                     type="number"
                     min="0"
+                    readOnly={!isDraft}
                     placeholder="0.00"
                     value={
                       activeRepair.advancePaid === 0
@@ -527,6 +563,7 @@ export default function RepairsView({
                         : activeRepair.advancePaid
                     }
                     onChange={(e) => {
+                      if (!isDraft) return;
                       const advVal = Math.max(0, Number(e.target.value) || 0);
                       onUpdateRepair(activeRepair.id, {
                         advancePaid: advVal,
@@ -536,7 +573,7 @@ export default function RepairsView({
                         ),
                       });
                     }}
-                    className="h-10 w-full pl-6 pr-3 border border-outline-variant rounded bg-[#ffffff] text-right text-xs font-mono font-bold text-primary focus:border-tertiary outline-none"
+                    className="h-10 w-full pl-6 pr-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-[#ffffff] text-right text-xs font-mono font-bold text-primary focus:border-tertiary outline-none"
                   />
                 </div>
               </div>
@@ -549,6 +586,7 @@ export default function RepairsView({
               </div>
             </div>
           </div>
+          </fieldset>
 
           {/* Section: Action Triggers & Note Footnotes */}
           <div className="flex flex-col gap-4">
@@ -573,11 +611,12 @@ export default function RepairsView({
                 </span>
               </label>
               <textarea
+                readOnly={!isDraft}
                 maxLength={150}
                 value={activeRepair.footnote}
                 onChange={(e) => handleUpdateField("footnote", e.target.value)}
                 placeholder="Ej: 30 días de garantía en piezas reemplazadas."
-                className="w-full border border-outline-variant rounded bg-[#ffffff] text-xs p-2.5 h-16 focus:border-tertiary outline-none resize-none leading-relaxed font-sans"
+                className="w-full border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-[#ffffff] text-xs p-2.5 h-16 focus:border-tertiary outline-none resize-none leading-relaxed font-sans"
               />
             </div>
 
@@ -590,16 +629,26 @@ export default function RepairsView({
                 Vista Previa
               </button>
 
-              <button
-                type="button"
-                onClick={() => onSaveRepairOrder(activeRepair.id)}
-                className="w-full bg-primary hover:bg-primary-container text-white text-xs font-bold py-2.5 rounded transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer outline-none"
-              >
-                <span className="material-symbols-outlined text-[16px]">
-                  save
-                </span>
-                Guardar Nota
-              </button>
+              {isDraft && (
+                <button
+                  type="button"
+                  onClick={() => onSaveRepairOrder(activeRepair.id)}
+                  className="w-full bg-primary hover:bg-primary-container text-white text-xs font-bold py-2.5 rounded transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer outline-none"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    save
+                  </span>
+                  Guardar Nota
+                </button>
+              )}
+              {!isDraft && (
+                <div className="w-full flex items-center justify-center gap-1 text-xs text-on-surface-variant font-semibold bg-surface-container-low/40 py-2.5 rounded border border-dashed border-outline-variant select-none">
+                  <span className="material-symbols-outlined text-[16px]">
+                    lock
+                  </span>
+                  Solo Lectura
+                </div>
+              )}
             </div>
           </div>
         </div>

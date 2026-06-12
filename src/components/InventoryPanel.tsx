@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Product } from '../lib/supabase-types';
 
+function onlyText(v: string) {
+  return v.replace(/[0-9]/g, '');
+}
+
 interface InventoryPanelProps {
   products: Product[];
   onRefetchProducts: () => Promise<void>;
@@ -14,6 +18,9 @@ export default function InventoryPanel({ products, onRefetchProducts, showToast 
   const [category, setCategory] = useState('');
   const [stock, setStock] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [nameError, setNameError] = useState('');
+  const [priceError, setPriceError] = useState('');
+  const [stockError, setStockError] = useState('');
 
   const resetForm = () => {
     setName('');
@@ -21,17 +28,45 @@ export default function InventoryPanel({ products, onRefetchProducts, showToast 
     setCategory('');
     setStock('');
     setEditingId(null);
+    setNameError('');
+    setPriceError('');
+    setStockError('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !price) return;
+    let hasError = false;
+
+    if (!name.trim()) {
+      setNameError('El nombre es obligatorio');
+      hasError = true;
+    } else {
+      setNameError('');
+    }
+
+    const parsedPrice = Number(price);
+    if (!price || isNaN(parsedPrice) || parsedPrice <= 0) {
+      setPriceError('El precio debe ser mayor a 0');
+      hasError = true;
+    } else {
+      setPriceError('');
+    }
+
+    const parsedStock = parseInt(stock, 10);
+    if (stock && (isNaN(parsedStock) || parsedStock < 0 || String(parsedStock) !== stock)) {
+      setStockError('Stock debe ser un número entero >= 0');
+      hasError = true;
+    } else {
+      setStockError('');
+    }
+
+    if (hasError) return;
 
     const payload = {
       name: name.trim(),
-      price: Math.max(0, Number(price) || 0),
+      price: parsedPrice,
       category: category.trim() || 'General',
-      stock: Math.max(0, Number(stock) || 0),
+      stock: parsedStock || 0,
     };
 
     if (editingId !== null) {
@@ -86,21 +121,36 @@ export default function InventoryPanel({ products, onRefetchProducts, showToast 
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                const v = onlyText(e.target.value);
+                if (v !== e.target.value) {
+                  setNameError('Solo se permiten letras');
+                  setTimeout(() => setNameError(''), 2000);
+                } else {
+                  setNameError('');
+                }
+                setName(v);
+              }}
               placeholder="Nombre del producto"
-              className="h-9 border border-outline rounded px-3 focus:border-tertiary outline-none text-xs font-sans"
+              className={`h-9 border ${nameError ? 'border-error' : 'border-outline'} rounded px-3 focus:border-tertiary outline-none text-xs font-sans`}
             />
+            {nameError && <p className="text-[10px] font-sans text-error font-semibold">{nameError}</p>}
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-bold font-sans text-on-surface-variant uppercase tracking-wider">Precio</label>
             <input
               type="number"
               value={price}
-              onChange={(e) => setPrice(e.target.value)}
+              onChange={(e) => {
+                setPrice(e.target.value);
+                setPriceError('');
+              }}
               placeholder="$ 0.00"
               step="0.01"
-              className="h-9 border border-outline rounded px-3 focus:border-tertiary outline-none text-xs font-sans"
+              min="0.01"
+              className={`h-9 border ${priceError ? 'border-error' : 'border-outline'} rounded px-3 focus:border-tertiary outline-none text-xs font-sans`}
             />
+            {priceError && <p className="text-[10px] font-sans text-error font-semibold">{priceError}</p>}
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-bold font-sans text-on-surface-variant uppercase tracking-wider">Categoría</label>
@@ -117,11 +167,22 @@ export default function InventoryPanel({ products, onRefetchProducts, showToast 
             <input
               type="number"
               value={stock}
-              onChange={(e) => setStock(e.target.value)}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw.includes('.')) {
+                  setStockError('Stock debe ser número entero');
+                  setTimeout(() => setStockError(''), 2000);
+                  return;
+                }
+                setStock(raw);
+                setStockError('');
+              }}
               placeholder="0"
               min="0"
-              className="h-9 border border-outline rounded px-3 focus:border-tertiary outline-none text-xs font-sans"
+              step="1"
+              className={`h-9 border ${stockError ? 'border-error' : 'border-outline'} rounded px-3 focus:border-tertiary outline-none text-xs font-sans`}
             />
+            {stockError && <p className="text-[10px] font-sans text-error font-semibold">{stockError}</p>}
           </div>
         </div>
         <div className="flex gap-2 mt-3">
