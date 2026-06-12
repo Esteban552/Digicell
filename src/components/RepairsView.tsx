@@ -144,6 +144,28 @@ export default function RepairsView({
         </p>
       </div>
 
+      {/* Inline search bar for repairs */}
+      <div className="relative w-full max-w-md">
+        <span className="material-symbols-outlined text-on-surface-variant absolute left-3 top-1/2 -translate-y-1/2 text-[20px] pointer-events-none">
+          search
+        </span>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Buscar reparaciones, cliente, modelo o folio..."
+          className="w-full h-10 pl-10 pr-4 bg-white border border-outline-variant rounded text-sm text-on-surface focus:border-tertiary focus:ring-1 focus:ring-tertiary outline-none placeholder-on-surface-variant font-sans"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-error outline-none"
+          >
+            <span className="material-symbols-outlined text-[16px]">close</span>
+          </button>
+        )}
+      </div>
+
       {/* Grid core layout: Left Forms (span 8), Right Side metadata controls (span 4) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* LEFT COLUMN (Span 8) */}

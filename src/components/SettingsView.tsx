@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface SettingsViewProps {
   user: string | null;
@@ -13,10 +13,34 @@ export default function SettingsView({ user, showToast, settings, updateSetting 
   const shopName = settings.shop_name ?? 'Digicell Centro';
   const isBackupEnabled = settings.backup_enabled !== 'false';
 
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const setError = (k: string, m: string) => setErrors(p => ({ ...p, [k]: m }));
+  const clearError = (k: string) => setErrors(p => { const n = { ...p }; delete n[k]; return n; });
+
+  const validateAll = (fd: FormData): boolean => {
+    let ok = true;
+    const sn = (fd.get('shop_name') as string)?.trim();
+    if (!sn) { setError('shop_name', 'El nombre del negocio es obligatorio'); ok = false; }
+    else clearError('shop_name');
+
+    const er = (fd.get('exchange_rate') as string)?.trim();
+    const erNum = parseFloat(er);
+    if (!er || isNaN(erNum) || erNum <= 0) { setError('exchange_rate', 'Debe ser un número positivo'); ok = false; }
+    else clearError('exchange_rate');
+
+    const tr = (fd.get('tax_rate') as string)?.trim();
+    const trNum = parseFloat(tr);
+    if (!tr || isNaN(trNum) || trNum < 0 || trNum > 100) { setError('tax_rate', 'Debe estar entre 0 y 100'); ok = false; }
+    else clearError('tax_rate');
+
+    return ok;
+  };
+
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     const form = e.target as HTMLFormElement;
     const fd = new FormData(form);
+    if (!validateAll(fd)) return;
     await Promise.all([
       updateSetting('shop_name', (fd.get('shop_name') as string) ?? 'Digicell Centro'),
       updateSetting('exchange_rate', (fd.get('exchange_rate') as string) ?? '18.50'),
@@ -45,8 +69,10 @@ export default function SettingsView({ user, showToast, settings, updateSetting 
             type="text"
             name="shop_name"
             defaultValue={shopName}
-            className="h-10 border border-outline rounded px-3 focus:border-tertiary outline-none text-sm font-sans font-semibold"
+            onChange={() => clearError('shop_name')}
+            className={`h-10 border rounded px-3 focus:border-tertiary outline-none text-sm font-sans font-semibold ${errors.shop_name ? 'border-error' : 'border-outline'}`}
           />
+          {errors.shop_name && <p className="text-[10px] text-error font-semibold">{errors.shop_name}</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -56,8 +82,10 @@ export default function SettingsView({ user, showToast, settings, updateSetting 
               type="text"
               name="exchange_rate"
               defaultValue={exchangeRate}
-              className="h-10 border border-outline rounded px-3 focus:border-tertiary outline-none text-sm font-sans font-semibold"
+              onChange={() => clearError('exchange_rate')}
+              className={`h-10 border rounded px-3 focus:border-tertiary outline-none text-sm font-sans font-semibold ${errors.exchange_rate ? 'border-error' : 'border-outline'}`}
             />
+            {errors.exchange_rate && <p className="text-[10px] text-error font-semibold">{errors.exchange_rate}</p>}
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -66,8 +94,10 @@ export default function SettingsView({ user, showToast, settings, updateSetting 
               type="text"
               name="tax_rate"
               defaultValue={taxRate}
-              className="h-10 border border-outline rounded px-3 focus:border-tertiary outline-none text-sm font-sans font-semibold"
+              onChange={() => clearError('tax_rate')}
+              className={`h-10 border rounded px-3 focus:border-tertiary outline-none text-sm font-sans font-semibold ${errors.tax_rate ? 'border-error' : 'border-outline'}`}
             />
+            {errors.tax_rate && <p className="text-[10px] text-error font-semibold">{errors.tax_rate}</p>}
           </div>
         </div>
 

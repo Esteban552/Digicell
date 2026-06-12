@@ -135,8 +135,6 @@ export default function App() {
     }
   }, [repairs, selectedRepairId]);
 
-  // Search parameters
-  const [searchQuery, setSearchQuery] = useState('');
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [serviciosModalOpen, setServiciosModalOpen] = useState(false);
 
@@ -400,7 +398,8 @@ export default function App() {
   // Complete point-of-sale transaction
   const handleCompletePOSCheckout = async (cash: number, card: number, usd: number) => {
     const subtotalCost = cart.reduce((acc, c) => acc + (c.price * c.qty), 0);
-    const taxCharge = subtotalCost * 0.16;
+    const taxPct = settings.tax_rate !== undefined ? parseFloat(settings.tax_rate) : 16;
+    const taxCharge = subtotalCost * (taxPct / 100);
     const totalCost = subtotalCost + taxCharge;
 
     const itemsDesc = cart.map(c => `${c.qty}x ${c.name}`).join(', ');
@@ -529,8 +528,6 @@ export default function App() {
         {/* Top bar header */}
         <Header
           activeView={currentView}
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
           user={userName}
           onOpenSearchModal={() => setSearchModalOpen(true)}
           onCreateNewRepair={handleCreateNewRepair}
@@ -570,6 +567,8 @@ export default function App() {
                 showToast={showToast}
                 products={products}
                 onRefetchProducts={refetchProducts}
+                taxRate={settings.tax_rate !== undefined ? parseFloat(settings.tax_rate) : 16}
+                exchangeRate={settings.exchange_rate !== undefined ? parseFloat(settings.exchange_rate) : 18.50}
               />
             )}
 

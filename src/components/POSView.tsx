@@ -24,6 +24,8 @@ interface POSViewProps {
   showToast: (title: string, desc: string, type: 'success' | 'info' | 'error') => void;
   products: Product[];
   onRefetchProducts: () => Promise<void>;
+  taxRate: number;
+  exchangeRate: number;
 }
 
 export default function POSView({
@@ -33,6 +35,8 @@ export default function POSView({
   onRegisterCashMovement,
   showToast,
   products,
+  taxRate,
+  exchangeRate,
   onRefetchProducts
 }: POSViewProps) {
   // Quick adder states
@@ -86,17 +90,19 @@ export default function POSView({
     return cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
   }, [cart]);
 
+  const effectiveTaxRate = taxRate; // ya viene parseado desde App
+
   const tax = useMemo(() => {
-    return subtotal * 0.16;
-  }, [subtotal]);
+    return subtotal * (effectiveTaxRate / 100);
+  }, [subtotal, effectiveTaxRate]);
 
   const total = useMemo(() => {
     return subtotal + tax;
   }, [subtotal, tax]);
 
   const totalUsd = useMemo(() => {
-    return total / 18.50;
-  }, [total]);
+    return exchangeRate > 0 ? total / exchangeRate : 0;
+  }, [total, exchangeRate]);
 
   // Handle click on suggestion
   const selectSuggestion = (name: string, price: number, productId?: number) => {
@@ -216,7 +222,7 @@ export default function POSView({
     const cash = Math.max(0, Number(cashLocal) || 0);
     const card = Math.max(0, Number(cardLocal) || 0);
     const usd = Math.max(0, Number(cashUsd) || 0);
-    const usdValue = usd * 18.50;
+    const usdValue = usd * exchangeRate;
     const sumPay = cash + card + usdValue;
     if (sumPay < total) {
       showToast('Pago insuficiente', `Faltan $${(total - sumPay).toFixed(2)} para cubrir el total.`, 'error');
@@ -478,7 +484,7 @@ export default function POSView({
                 <span className="font-bold">${subtotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-xs font-sans">
-                <span className="text-on-surface-variant font-semibold">IVA (16%)</span>
+                <span className="text-on-surface-variant font-semibold">IVA ({effectiveTaxRate}%)</span>
                 <span className="font-bold">${tax.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm font-sans pt-2 border-t border-outline-variant">
@@ -486,7 +492,7 @@ export default function POSView({
                 <span className="font-bold text-primary text-lg">${total.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-[10px] font-sans text-on-surface-variant font-semibold">
-                <span>Tipo de Cambio (USD 1.00 = MX$18.50)</span>
+                <span>{`Tipo de Cambio (USD 1.00 = MX$${exchangeRate.toFixed(2)})`}</span>
                 <span>≈ ${totalUsd.toFixed(2)} USD</span>
               </div>
 
@@ -533,7 +539,7 @@ export default function POSView({
               }} />
               {(() => {
                 const recv = calcTotal(calcCounts);
-                const { change, short } = calcChange(recv + Math.max(0, Number(cardLocal) || 0) + (Math.max(0, Number(cashUsd) || 0) * 18.50), total);
+                const { change, short } = calcChange(recv + Math.max(0, Number(cardLocal) || 0) + (Math.max(0, Number(cashUsd) || 0) * exchangeRate), total);
                 return (
                   <div className="mt-2 space-y-1 text-xs font-sans border-t border-outline-variant pt-2">
                     {recv > 0 && (
@@ -567,7 +573,7 @@ export default function POSView({
             {(() => {
               const cash = Math.max(0, Number(cashLocal) || 0);
               const card = Math.max(0, Number(cardLocal) || 0);
-              const usdValue = Math.max(0, Number(cashUsd) || 0) * 18.50;
+              const usdValue = Math.max(0, Number(cashUsd) || 0) * exchangeRate;
               const sumPay = cash + card + usdValue;
               const change = sumPay - total;
               return (

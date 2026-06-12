@@ -8,8 +8,6 @@ import { ActiveView } from '../types';
 
 interface HeaderProps {
   activeView: ActiveView;
-  searchQuery: string;
-  onSearchQueryChange: (query: string) => void;
   user: string | null;
   onOpenSearchModal: () => void;
   onCreateNewRepair: () => void;
@@ -23,8 +21,6 @@ interface HeaderProps {
 
 export default function Header({
   activeView,
-  searchQuery,
-  onSearchQueryChange,
   user,
   onOpenSearchModal,
   onCreateNewRepair,
@@ -115,43 +111,7 @@ export default function Header({
             Limpiar Pantalla
           </button>
         </div>
-      ) : (
-        <div className="flex-1 max-w-md">
-          <div className="relative flex items-center w-full h-10 rounded-md bg-surface-container-low border border-outline-variant focus-within:border-tertiary focus-within:bg-white focus-within:ring-1 focus-within:ring-tertiary transition-all">
-            <span className="material-symbols-outlined text-on-surface-variant ml-3 absolute pointer-events-none select-none text-[20px]">
-              search
-            </span>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => onSearchQueryChange(e.target.value)}
-              onClick={() => {
-                if (activeView === 'reports') {
-                  // Keep normal input
-                } else if (activeView === 'dashboard') {
-                  // Maybe focus
-                }
-              }}
-              placeholder={
-                activeView === 'pos'
-                  ? "Buscar productos..."
-                  : activeView === 'reports'
-                  ? "Buscar transacción o descripción..."
-                  : "Buscar reparaciones, modelo, cliente..."
-              }
-              className="w-full h-full pl-10 pr-4 bg-transparent border-none text-sm text-on-surface focus:outline-none focus:ring-0 placeholder-on-surface-variant font-sans"
-            />
-            {searchQuery && (
-              <button 
-                onClick={() => onSearchQueryChange('')}
-                className="absolute right-3 text-slate-400 hover:text-slate-600 outline-none"
-              >
-                <span className="material-symbols-outlined text-[16px]">close</span>
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      ) : <div className="flex-1" />}
 
       {/* Brand Center text in Reports View as seen on Screen 5 */}
       {activeView === 'reports' && (
