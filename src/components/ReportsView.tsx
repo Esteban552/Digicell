@@ -4,10 +4,11 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { LogEntry } from '../types';
+import { LogEntry, RepairOrder } from '../types';
 
 interface ReportsViewProps {
   logs: LogEntry[];
+  repairs: RepairOrder[];
   totalSalesSum: number;
   totalAdvancesSum: number;
   totalCashSum: number;
@@ -27,38 +28,70 @@ const statusLabels: Record<string, string> = {
   'Outflow': 'Salida'
 };
 
+type TypeFilter = 'all' | 'sales' | 'advances' | 'cash';
+
+const repairStatusConfig = [
+  { key: 'in_review' as const, label: 'En Revisión', icon: 'search', color: 'text-rose-600', bg: 'bg-rose-50' },
+  { key: 'waiting_parts' as const, label: 'Esperando Piezas', icon: 'inventory_2', color: 'text-amber-600', bg: 'bg-amber-50' },
+  { key: 'repaired' as const, label: 'Reparado', icon: 'check_circle', color: 'text-blue-600', bg: 'bg-blue-50' },
+  { key: 'delivered' as const, label: 'Entregado', icon: 'assignment_turned_in', color: 'text-emerald-600', bg: 'bg-emerald-50' },
+];
+
 export default function ReportsView({
   logs,
+  repairs,
   totalSalesSum,
   totalAdvancesSum,
   totalCashSum,
   showToast
 }: ReportsViewProps) {
   const [filterQuery, setFilterQuery] = useState('');
-  const [selectedDate, setSelectedDate] = useState('2023-10-27');
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [activeFilter, setActiveFilter] = useState<TypeFilter>('all');
 
-  // Filter logs based on search inputs
+  const logIsOnDate = (log: LogEntry, date: string) =>
+    (log.created_at && log.created_at.startsWith(date)) || (log.time && log.time.startsWith(date));
+
+  const dateFilteredLogs = useMemo(() =>
+    logs.filter(l => logIsOnDate(l, selectedDate)),
+    [logs, selectedDate]
+  );
+
   const filteredLogs = useMemo(() => {
-    if (!filterQuery) return logs;
-    const q = filterQuery.toLowerCase();
-    return logs.filter(log => 
-      log.description.toLowerCase().includes(q) || 
-      log.type.toLowerCase().includes(q) ||
-      log.status.toLowerCase().includes(q)
-    );
-  }, [logs, filterQuery]);
+    let result = dateFilteredLogs;
+    if (activeFilter === 'sales') result = result.filter(l => l.type === 'POS Sale');
+    if (activeFilter === 'advances') result = result.filter(l => l.type === 'Repair Advance' || l.type === 'Repair Payment');
+    if (activeFilter === 'cash') result = result.filter(l => l.type === 'Cash Movement');
+    if (filterQuery) {
+      const q = filterQuery.toLowerCase();
+      result = result.filter(log =>
+        log.description.toLowerCase().includes(q) ||
+        log.type.toLowerCase().includes(q) ||
+        log.status.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [dateFilteredLogs, activeFilter, filterQuery]);
 
-  const handlePrintCorte = () => {
-    showToast(
-      'Imprimiendo Corte', 
-      `Se ha enviado a imprimir el informe de corte de caja para el día ${selectedDate}.`, 
-      'success'
-    );
-  };
+  const todayStats = useMemo(() => {
+    const sales = dateFilteredLogs.filter(l => l.type === 'POS Sale').reduce((a, c) => a + c.amount, 0);
+    const advances = dateFilteredLogs.filter(l => l.type === 'Repair Advance').reduce((a, c) => a + c.amount, 0);
+    const payments = dateFilteredLogs.filter(l => l.type === 'Repair Payment').reduce((a, c) => a + c.amount, 0);
+    const movements = dateFilteredLogs.filter(l => l.type === 'Cash Movement');
+    const cashIn = movements.filter(l => l.amount > 0).reduce((a, c) => a + c.amount, 0);
+    const cashOut = movements.filter(l => l.amount < 0).reduce((a, c) => a + Math.abs(c.amount), 0);
+    return { sales, advances, payments, cashIn, cashOut };
+  }, [dateFilteredLogs]);
+
+  const repairCounts = useMemo(() => {
+    const counts: Record<string, number> = { in_review: 0, waiting_parts: 0, repaired: 0, delivered: 0 };
+    repairs.forEach(r => { if (counts[r.status] !== undefined) counts[r.status]++; });
+    return counts;
+  }, [repairs]);
 
   return (
     <div className="flex-1 flex flex-col gap-6 font-sans select-none">
-      
+
       {/* Upper header action row */}
       <section className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 w-full">
         <div>
@@ -89,25 +122,34 @@ export default function ReportsView({
       {/* Primary Command Bar */}
       <section className="bg-white border border-outline-variant rounded-md p-4 flex flex-wrap gap-3 items-center justify-between shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
         <div className="flex flex-wrap gap-2">
-          <button 
-            type="button" 
-            onClick={() => showToast('Filtrando Ingresos', 'Mostrando únicamente cobros por concepto de ventas directas.', 'info')}
-            className="h-10 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-on-surface text-xs font-semibold rounded flex items-center gap-1.5 cursor-pointer outline-none transition-colors border-dashed"
+          <button
+            type="button"
+            onClick={() => setActiveFilter(activeFilter === 'sales' ? 'all' : 'sales')}
+            className={`h-10 px-4 border text-xs font-semibold rounded flex items-center gap-1.5 cursor-pointer outline-none transition-colors ${activeFilter === 'sales' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white border-slate-300 hover:bg-slate-50 text-on-surface border-dashed'}`}
           >
             <span className="material-symbols-outlined text-[16px]">visibility</span>
             Ver ingresos
           </button>
-          
-          <button 
+
+          <button
             type="button"
-            onClick={() => showToast('Moviendo Flujo', 'Filtrando movimientos manuales de caja chica (In/Out).', 'info')}
-            className="h-10 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-on-surface text-xs font-semibold rounded flex items-center gap-1.5 cursor-pointer outline-none transition-colors border-dashed"
+            onClick={() => setActiveFilter(activeFilter === 'advances' ? 'all' : 'advances')}
+            className={`h-10 px-4 border text-xs font-semibold rounded flex items-center gap-1.5 cursor-pointer outline-none transition-colors ${activeFilter === 'advances' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-slate-300 hover:bg-slate-50 text-on-surface border-dashed'}`}
+          >
+            <span className="material-symbols-outlined text-[16px]">build</span>
+            Ver anticipos
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveFilter(activeFilter === 'cash' ? 'all' : 'cash')}
+            className={`h-10 px-4 border text-xs font-semibold rounded flex items-center gap-1.5 cursor-pointer outline-none transition-colors ${activeFilter === 'cash' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white border-slate-300 hover:bg-slate-50 text-on-surface border-dashed'}`}
           >
             <span className="material-symbols-outlined text-[16px]">swap_horiz</span>
             Ver movimientos de caja
           </button>
 
-          <button 
+          <button
             type="button"
             onClick={() => showToast('Ticket Corte', 'Se ha preparado la plantilla de flujo de caja para impresión.', 'info')}
             className="h-10 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-on-surface text-xs font-semibold rounded flex items-center gap-1.5 cursor-pointer outline-none transition-colors border-dashed"
@@ -117,9 +159,9 @@ export default function ReportsView({
           </button>
         </div>
 
-        <button 
-          type="button" 
-          onClick={handlePrintCorte}
+        <button
+          type="button"
+          onClick={() => showToast('Imprimiendo Corte', `Se ha enviado a imprimir el informe de corte de caja para el día ${selectedDate}.`, 'success')}
           className="h-10 px-4 bg-primary hover:bg-primary-container text-white text-xs font-bold rounded flex items-center gap-2 cursor-pointer shadow-md shadow-primary/20 hover:shadow-lg transition-all outline-none"
         >
           <span className="material-symbols-outlined text-[16px]">receipt_long</span>
@@ -129,24 +171,20 @@ export default function ReportsView({
 
       {/* Bento Grid layout statistics */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        
+
         {/* Sales Stats Box */}
         <div className="bg-white border border-slate-200 rounded-lg p-6 relative overflow-hidden group hover:shadow-sm transition-all shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
           <div className="absolute top-0 right-0 p-4 opacity-5 text-on-surface">
             <span className="material-symbols-outlined text-[68px]">point_of_sale</span>
           </div>
-          <h3 className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">Ventas POS Totales</h3>
+          <h3 className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">Ventas POS {selectedDate}</h3>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold font-sans text-on-surface">
-              ${totalSalesSum.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-            <span className="text-[10px] font-bold text-emerald-600 flex items-center font-sans">
-              <span className="material-symbols-outlined text-[12px] mr-0.5">arrow_upward</span> 
-              12%
+              ${todayStats.sales.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
           <p className="text-xs font-sans text-slate-400 mt-1 font-semibold">
-            {logs.filter(l => l.type === 'POS Sale').length} Transacciones hoy
+            {dateFilteredLogs.filter(l => l.type === 'POS Sale').length} transacciones · Total histórico: ${totalSalesSum.toFixed(2)}
           </p>
         </div>
 
@@ -155,14 +193,14 @@ export default function ReportsView({
           <div className="absolute top-0 right-0 p-4 opacity-5 text-blue-600">
             <span className="material-symbols-outlined text-[68px]">build</span>
           </div>
-          <h3 className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">Anticipos de Reparación</h3>
+          <h3 className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">Anticipos + Pagos {selectedDate}</h3>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold font-sans text-on-surface">
-              ${totalAdvancesSum.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${(todayStats.advances + todayStats.payments).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
           <p className="text-xs font-sans text-slate-400 mt-1 font-semibold">
-            De {logs.filter(l => l.type === 'Repair Advance').length} tickets activos
+            {repairCounts.in_review + repairCounts.waiting_parts + repairCounts.repaired} activas · Total histórico: ${totalAdvancesSum.toFixed(2)}
           </p>
         </div>
 
@@ -171,30 +209,47 @@ export default function ReportsView({
           <div className="absolute top-0 right-0 p-4 opacity-10 text-white">
             <span className="material-symbols-outlined text-[68px] icon-fill">account_balance_wallet</span>
           </div>
-          <h3 className="text-[11px] font-bold text-red-200 uppercase tracking-wider mb-2">Efectivo Total en Caja</h3>
+          <h3 className="text-[11px] font-bold text-red-200 uppercase tracking-wider mb-2">Flujo del Día {selectedDate}</h3>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold font-sans text-[#ffffff]">
-              ${totalCashSum.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${(todayStats.sales + todayStats.advances + todayStats.payments + todayStats.cashIn - todayStats.cashOut).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
           <p className="text-xs font-sans text-red-300 mt-1 font-semibold">
-            Listo para Corte del Día
+            +${todayStats.cashIn.toFixed(2)} entró · -${todayStats.cashOut.toFixed(2)} salió
           </p>
         </div>
 
       </section>
 
+      {/* Repair status summary row */}
+      <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {repairStatusConfig.map(({ key, label, icon, color, bg }) => (
+          <div key={key} className={`${bg} border border-outline-variant rounded-lg p-4 flex items-center gap-3 hover:shadow-sm transition-all`}>
+            <span className={`material-symbols-outlined ${color} text-[28px]`}>{icon}</span>
+            <div>
+              <p className="text-xs font-sans text-on-surface-variant font-semibold">{label}</p>
+              <p className={`text-xl font-bold font-sans ${color}`}>{repairCounts[key]}</p>
+            </div>
+          </div>
+        ))}
+      </section>
+
       {/* Detailed table Activity logs list layout card */}
       <section className="bg-white border border-outline-variant rounded-lg flex-1 flex flex-col overflow-hidden mb-6 shadow-sm min-h-[300px]">
         <div className="p-4 border-b border-outline-variant flex justify-between items-center bg-[#ffffff]">
-          <h3 className="text-sm font-bold text-on-surface font-sans">Registro de Actividad Diaria</h3>
-          
+          <h3 className="text-sm font-bold text-on-surface font-sans">
+            {activeFilter === 'all' ? 'Registro de Actividad Diaria' :
+             activeFilter === 'sales' ? 'Ingresos por Ventas' :
+             activeFilter === 'advances' ? 'Anticipos y Pagos' : 'Movimientos de Caja'}
+          </h3>
+
           <div className="relative">
             <span className="absolute left-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-[14px]">
               filter_alt
             </span>
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={filterQuery}
               onChange={(e) => setFilterQuery(e.target.value)}
               placeholder="Filtrar lista..."
@@ -216,24 +271,27 @@ export default function ReportsView({
             </thead>
             <tbody className="text-xs select-text font-sans">
               {filteredLogs.map((log) => (
-                <tr 
-                  key={log.id} 
+                <tr
+                  key={log.id}
                   className="even:bg-slate-50/40 hover:bg-slate-100/30 transition-colors border-b border-slate-100 last:border-0"
                 >
-                  <td className="p-3 font-mono font-medium text-on-surface-variant">{log.time}</td>
+                  <td className="p-3 font-mono font-medium text-on-surface-variant">
+                    {log.time && log.time.includes('T') ? log.time.split('T')[1].split('.')[0].slice(0, 5) : log.time}
+                  </td>
                   <td className="p-3">
                     <span className="flex items-center gap-1.5 text-on-surface font-semibold text-[11px]">
                       <span className={`material-symbols-outlined text-[16px] ${
                         log.type === 'POS Sale' ? 'text-emerald-500' :
-                        log.type === 'Repair Advance' ? 'text-blue-500' :
+                        log.type === 'Repair Advance' || log.type === 'Repair Payment' ? 'text-blue-500' :
                         log.type === 'Cash Movement' ? 'text-rose-500' :
                         'text-indigo-500'
                       }`}>
                         {
                           log.type === 'POS Sale' ? 'point_of_sale' :
                           log.type === 'Repair Advance' ? 'build' :
+                          log.type === 'Repair Payment' ? 'payments' :
                           log.type === 'Cash Movement' ? 'swap_horiz' :
-                          'payments'
+                          'receipt'
                         }
                       </span>
                       {typeLabels[log.type] || log.type}
@@ -259,7 +317,7 @@ export default function ReportsView({
               {filteredLogs.length === 0 && (
                 <tr>
                   <td colSpan={5} className="p-8 text-center text-slate-400 font-sans font-semibold">
-                    No se encontraron registros de actividad.
+                    No se encontraron registros para el {selectedDate}. {activeFilter !== 'all' && 'Cambiá el filtro o la fecha.'}
                   </td>
                 </tr>
               )}
@@ -268,7 +326,7 @@ export default function ReportsView({
         </div>
 
         <div className="p-3 border-t border-slate-200 bg-slate-50 flex justify-between items-center select-none font-sans text-[11px] leading-normal">
-          <span className="text-slate-500 font-medium">Mostrando {filteredLogs.length} de {logs.length} registros</span>
+          <span className="text-slate-500 font-medium">Mostrando {filteredLogs.length} de {dateFilteredLogs.length} registros del {selectedDate}</span>
           <div className="flex gap-1">
             <button className="w-8 h-8 rounded border border-slate-300 flex items-center justify-center text-slate-400 hover:bg-white disabled:opacity-50" disabled>
               <span className="material-symbols-outlined text-[16px]">chevron_left</span>

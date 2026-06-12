@@ -25,6 +25,7 @@ export default function Sidebar({
     { view: 'dashboard' as ActiveView, label: 'Panel', icon: 'dashboard' },
     { view: 'pos' as ActiveView, label: 'POS', icon: 'point_of_sale' },
     { view: 'repairs' as ActiveView, label: 'Reparaciones', icon: 'build' },
+    { view: 'arqueo' as ActiveView, label: 'Arqueo', icon: 'account_balance' },
     { view: 'reports' as ActiveView, label: 'Reportes', icon: 'analytics' },
   ];
 

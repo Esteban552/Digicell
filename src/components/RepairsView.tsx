@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import type { RepairOrder, RepairStatus } from "../types";
 import ServiciosModal from "./ServiciosModal";
 
@@ -55,7 +55,15 @@ export default function RepairsView({
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Is this a new draft (editable) or an existing saved repair (read-only)?
+  // Delivery confirmation guard — prevents accidental lock when picking "Entregado"
+  const [deliveryConfirmPending, setDeliveryConfirmPending] = useState(false);
+
+  // Reset pending on note switch
+  useEffect(() => {
+    setDeliveryConfirmPending(false);
+  }, [selectedId]);
+
+  // Is this a new draft or an existing saved repair?
   const isDraft = selectedId === draftId;
 
   // Find active loaded repair (draft or existing)
@@ -64,11 +72,18 @@ export default function RepairsView({
     return repairs.find((r) => r.id === selectedId) || repairs[0];
   }, [repairs, selectedId, draftId, draftRepair]);
 
+  const isDelivered = !isDraft && activeRepair?.status === 'delivered' && !deliveryConfirmPending;
+
+  // Validation error states
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const setError = (field: string, msg: string) => setErrors(prev => ({ ...prev, [field]: msg }));
+  const clearError = (field: string) => setErrors(prev => { const n = { ...prev }; delete n[field]; return n; });
+
   // Handle live calculation of remaining balance
   const remainingCalculated = useMemo(() => {
     if (!activeRepair) return 0;
     const cost = activeRepair.totalCost || 0;
-    const paid = activeRepair.advancePaid || 0;
+    const paid = (activeRepair.advancePaid || 0) + (activeRepair.abonosPaid || 0);
     return Math.max(0, cost - paid);
   }, [activeRepair]);
 
@@ -112,7 +127,8 @@ export default function RepairsView({
   };
 
   const handleUpdateField = (key: keyof RepairOrder, value: any) => {
-    if (!isDraft) return;
+    if (isDelivered) return;
+    if (!isDraft && key !== 'status' && key !== 'internalNotes') return;
     onUpdateRepair(activeRepair.id, { [key]: value });
   };
 
@@ -154,29 +170,47 @@ export default function RepairsView({
                     type="tel"
                     value={activeRepair.clientPhone}
                     readOnly={!isDraft}
-                    onChange={(e) =>
-                      handleUpdateField("clientPhone", e.target.value)
-                    }
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      let formatted = digits;
+                      if (digits.length >= 3) formatted = `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+                      if (digits.length >= 7) formatted = `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+                      handleUpdateField("clientPhone", formatted);
+                      if (digits.length === 10) clearError('clientPhone');
+                    }}
+                    onBlur={() => {
+                      const digits = (activeRepair.clientPhone || '').replace(/\D/g, '');
+                      if (digits && digits.length !== 10) setError('clientPhone', 'El teléfono debe tener 10 dígitos');
+                      else clearError('clientPhone');
+                    }}
                     placeholder="(555) 000-0000"
-                    className="h-10 w-full pl-9 pr-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none transition-all font-sans"
+                    className={`h-10 w-full pl-9 pr-3 border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none transition-all font-sans ${errors.clientPhone ? 'border-error' : 'border-outline-variant'}`}
                   />
                 </div>
+                {errors.clientPhone && <p className="text-[10px] font-sans text-error font-semibold">{errors.clientPhone}</p>}
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] font-bold text-on-surface-variant font-sans">
-                  Nombre Completo
+                  Nombre Completo <span className="text-error">*</span>
                 </label>
                 <input
                   type="text"
                   value={activeRepair.clientName}
                   readOnly={!isDraft}
-                  onChange={(e) =>
-                    handleUpdateField("clientName", e.target.value)
-                  }
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[0-9]/g, '');
+                    handleUpdateField("clientName", v);
+                    if (v.trim()) clearError('clientName');
+                  }}
+                  onBlur={() => {
+                    if (!activeRepair.clientName?.trim()) setError('clientName', 'El nombre del cliente es obligatorio');
+                    else clearError('clientName');
+                  }}
                   placeholder="Juan Pérez"
-                  className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none transition-all font-sans font-medium"
+                  className={`h-10 w-full px-3 border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none transition-all font-sans font-medium ${errors.clientName ? 'border-error' : 'border-outline-variant'}`}
                 />
+                {errors.clientName && <p className="text-[10px] font-sans text-error font-semibold">{errors.clientName}</p>}
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -187,12 +221,19 @@ export default function RepairsView({
                   type="email"
                   value={activeRepair.clientEmail}
                   readOnly={!isDraft}
-                  onChange={(e) =>
-                    handleUpdateField("clientEmail", e.target.value)
-                  }
+                  onChange={(e) => {
+                    handleUpdateField("clientEmail", e.target.value);
+                    if (errors.clientEmail) clearError('clientEmail');
+                  }}
+                  onBlur={() => {
+                    const v = activeRepair.clientEmail?.trim();
+                    if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) setError('clientEmail', 'Correo electrónico no válido');
+                    else clearError('clientEmail');
+                  }}
                   placeholder="cliente@correo.com"
-                  className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none transition-all font-sans"
+                  className={`h-10 w-full px-3 border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none transition-all font-sans ${errors.clientEmail ? 'border-error' : 'border-outline-variant'}`}
                 />
+                {errors.clientEmail && <p className="text-[10px] font-sans text-error font-semibold">{errors.clientEmail}</p>}
               </div>
             </div>
           </div>
@@ -231,18 +272,24 @@ export default function RepairsView({
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] font-bold text-on-surface-variant font-sans">
-                  Modelo
+                  Modelo {activeRepair.totalCost > 0 && <span className="text-error">*</span>}
                 </label>
                 <input
                   type="text"
                   value={activeRepair.deviceModel}
                   readOnly={!isDraft}
-                  onChange={(e) =>
-                    handleUpdateField("deviceModel", e.target.value)
-                  }
+                  onChange={(e) => {
+                    handleUpdateField("deviceModel", e.target.value);
+                    if (errors.deviceModel) clearError('deviceModel');
+                  }}
+                  onBlur={() => {
+                    if (activeRepair.totalCost > 0 && !activeRepair.deviceModel?.trim()) setError('deviceModel', 'Indicá el modelo si hay costo');
+                    else clearError('deviceModel');
+                  }}
                   placeholder="Ej: iPhone 13 Pro"
-                  className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans font-medium"
+                  className={`h-10 w-full px-3 border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans font-medium ${errors.deviceModel ? 'border-error' : 'border-outline-variant'}`}
                 />
+                {errors.deviceModel && <p className="text-[10px] font-sans text-error font-semibold">{errors.deviceModel}</p>}
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -331,12 +378,20 @@ export default function RepairsView({
                   type="text"
                   value={activeRepair.batteryPercent}
                   readOnly={!isDraft}
-                  onChange={(e) =>
-                    handleUpdateField("batteryPercent", e.target.value)
-                  }
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, '').slice(0, 3);
+                    handleUpdateField("batteryPercent", v);
+                    if (errors.batteryPercent) clearError('batteryPercent');
+                  }}
+                  onBlur={() => {
+                    const n = parseInt(activeRepair.batteryPercent, 10);
+                    if (activeRepair.batteryPercent && (isNaN(n) || n < 0 || n > 100)) setError('batteryPercent', 'Debe ser un número entre 0 y 100');
+                    else clearError('batteryPercent');
+                  }}
                   placeholder="0-100"
-                  className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans"
+                  className={`h-10 w-full px-3 border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans ${errors.batteryPercent ? 'border-error' : 'border-outline-variant'}`}
                 />
+                {errors.batteryPercent && <p className="text-[10px] font-sans text-error font-semibold">{errors.batteryPercent}</p>}
               </div>
 
               <div className="flex items-center h-10 select-none pb-1 font-sans">
@@ -376,8 +431,6 @@ export default function RepairsView({
           </div>
           </fieldset>
 
-          <fieldset disabled={!isDraft} className="border-0 p-0 m-0 min-w-0">
-          {/* Section: Service Details (textareas) */}
           <div className="bg-white border border-outline-variant rounded-md p-5 select-none hover:shadow-sm transition-all shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
             <h3 className="text-sm font-bold text-on-surface border-b border-outline-variant/60 pb-3 mb-4 flex items-center gap-2">
               <span className="material-symbols-outlined text-primary text-[20px]">
@@ -385,7 +438,8 @@ export default function RepairsView({
               </span>
               Detalles del Servicio
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <fieldset disabled={!isDraft} className="border-0 p-0 m-0 min-w-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] font-bold text-on-surface-variant font-sans">
                   Condiciones de Recepción
@@ -408,21 +462,41 @@ export default function RepairsView({
                 <textarea
                   readOnly={!isDraft}
                   value={activeRepair.problemReported}
-                  onChange={(e) =>
-                    handleUpdateField("problemReported", e.target.value)
-                  }
+                  onChange={(e) => {
+                    handleUpdateField("problemReported", e.target.value);
+                    if (e.target.value.trim()) clearError('problemReported');
+                  }}
+                  onBlur={() => {
+                    if (!activeRepair.problemReported?.trim()) setError('problemReported', 'El detalle del problema es obligatorio');
+                    else clearError('problemReported');
+                  }}
                   placeholder="Detalle de la falla y trabajo requerido..."
-                  className="w-full border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface p-3 h-24 focus:border-tertiary outline-none resize-none leading-relaxed font-sans font-medium"
+                  className={`w-full border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface p-3 h-24 focus:border-tertiary outline-none resize-none leading-relaxed font-sans font-medium ${errors.problemReported ? 'border-error' : 'border-outline-variant'}`}
                 />
+                {errors.problemReported && <p className="text-[10px] font-sans text-error font-semibold">{errors.problemReported}</p>}
               </div>
             </div>
+            </fieldset>
+
+            {/* Internal notes — always editable */}
+            <div className="border-t border-outline-variant/60 pt-3 mt-2">
+              <label className="text-[11px] font-bold text-on-surface-variant font-sans flex items-center gap-1.5 mb-1.5">
+                <span className="material-symbols-outlined text-[16px]">notes</span>
+                Notas internas (técnicos)
+              </label>
+              <textarea
+                readOnly={isDelivered}
+                value={activeRepair.internalNotes}
+                onChange={(e) => handleUpdateField('internalNotes', e.target.value)}
+                placeholder="Mensajes entre técnicos sobre el avance del trabajo..."
+                className="w-full border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface p-3 h-20 focus:border-tertiary outline-none resize-none leading-relaxed font-sans"
+              />
+            </div>
           </div>
-          </fieldset>
         </div>
 
         {/* RIGHT COLUMN (Span 4) */}
         <div className="lg:col-span-4 flex flex-col gap-6">
-          <fieldset disabled={!isDraft} className="border-0 p-0 m-0 min-w-0 space-y-4">
           {/* Section: Management status dropdowns */}
           <div className="bg-white border border-outline-variant rounded-md p-5 select-none hover:shadow-sm transition-all shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
             <h3 className="text-sm font-bold text-on-surface border-b border-outline-variant/60 pb-3 mb-4 flex items-center gap-2 flex-wrap">
@@ -437,11 +511,13 @@ export default function RepairsView({
                   Estado
                 </label>
                 <select
-                  disabled={!isDraft}
+                  disabled={isDelivered}
                   value={activeRepair.status}
-                  onChange={(e) =>
-                    handleUpdateField("status", e.target.value as RepairStatus)
-                  }
+                  onChange={(e) => {
+                    const newStatus = e.target.value as RepairStatus;
+                    handleUpdateField('status', newStatus);
+                    setDeliveryConfirmPending(newStatus === 'delivered');
+                  }}
                   className="h-10 w-full px-2.5 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs font-bold text-primary focus:border-tertiary outline-none cursor-pointer font-sans"
                 >
                   <option value="in_review">En Revisión</option>
@@ -471,39 +547,48 @@ export default function RepairsView({
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] font-bold text-on-surface-variant font-sans">
-                  Fecha de Entrega
+                  Fecha de Entrega <span className="text-error">*</span>
                 </label>
                 <input
                   type="date"
                   value={activeRepair.deliveryDate}
                   readOnly={!isDraft}
-                  onChange={(e) =>
-                    handleUpdateField("deliveryDate", e.target.value)
-                  }
-                  className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs font-medium text-on-surface focus:border-tertiary outline-none font-sans"
+                  onChange={(e) => {
+                    handleUpdateField("deliveryDate", e.target.value);
+                    if (errors.deliveryDate) clearError('deliveryDate');
+                  }}
+                  onBlur={() => {
+                    if (!activeRepair.deliveryDate?.trim()) setError('deliveryDate', 'La fecha de entrega es obligatoria');
+                    else clearError('deliveryDate');
+                  }}
+                  className={`h-10 w-full px-3 border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs font-medium text-on-surface focus:border-tertiary outline-none font-sans ${errors.deliveryDate ? 'border-error' : 'border-outline-variant'}`}
                 />
+                {errors.deliveryDate && <p className="text-[10px] font-sans text-error font-semibold">{errors.deliveryDate}</p>}
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] font-bold text-on-surface-variant font-sans">
-                  Fin de Garantía
+                  Fin de Garantía <span className="text-error">*</span>
                 </label>
                 <input
                   type="date"
                   value={activeRepair.warrantyEnd}
                   readOnly={!isDraft}
-                  onChange={(e) =>
-                    handleUpdateField("warrantyEnd", e.target.value)
-                  }
-                  className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans"
+                  onChange={(e) => {
+                    handleUpdateField("warrantyEnd", e.target.value);
+                    if (errors.warrantyEnd) clearError('warrantyEnd');
+                  }}
+                  onBlur={() => {
+                    if (!activeRepair.warrantyEnd?.trim()) setError('warrantyEnd', 'La fecha de garantía es obligatoria');
+                    else clearError('warrantyEnd');
+                  }}
+                  className={`h-10 w-full px-3 border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans ${errors.warrantyEnd ? 'border-error' : 'border-outline-variant'}`}
                 />
+                {errors.warrantyEnd && <p className="text-[10px] font-sans text-error font-semibold">{errors.warrantyEnd}</p>}
               </div>
             </div>
           </div>
-          </fieldset>
 
-          <fieldset disabled={!isDraft} className="border-0 p-0 m-0 min-w-0 space-y-4">
-          {/* Section: Financial cost metrics logs */}
           <div className="bg-white border border-outline-variant rounded-md p-5 select-none hover:shadow-sm transition-all shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
             <h3 className="text-sm font-bold text-on-surface border-b border-outline-variant/60 pb-3 mb-4 flex items-center gap-2">
               <span className="material-symbols-outlined text-primary text-[20px]">
@@ -512,70 +597,96 @@ export default function RepairsView({
               Finanzas
             </h3>
             <div className="space-y-4">
+              {/* totalCost — always editable */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] font-bold text-on-surface-variant font-sans">
                   Costo Total ($)
                 </label>
                 <div className="relative">
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-sans text-on-surface-variant">
-                    $
-                  </span>
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-sans text-on-surface-variant">$</span>
                   <input
                     type="number"
                     min="0"
-                    readOnly={!isDraft}
+                    step="0.01"
                     placeholder="0.00"
-                    value={
-                      activeRepair.totalCost === 0 ? "" : activeRepair.totalCost
-                    }
+                    readOnly={isDelivered}
+                    value={activeRepair.totalCost === 0 ? "" : activeRepair.totalCost}
                     onChange={(e) => {
-                      if (!isDraft) return;
+                      if (isDelivered) return;
                       const costVal = Math.max(0, Number(e.target.value) || 0);
                       onUpdateRepair(activeRepair.id, {
                         totalCost: costVal,
-                        remainingBalance: Math.max(
-                          0,
-                          costVal - activeRepair.advancePaid,
-                        ),
+                        remainingBalance: Math.max(0, costVal - (activeRepair.advancePaid || 0) - (activeRepair.abonosPaid || 0)),
                       });
+                      if (errors.totalCost) clearError('totalCost');
                     }}
-                    className="h-10 w-full pl-6 pr-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-[#ffffff] text-right text-xs font-mono font-medium focus:border-tertiary outline-none"
+                    onBlur={() => {
+                      if (activeRepair.totalCost < 0) setError('totalCost', 'El costo no puede ser negativo');
+                      else clearError('totalCost');
+                    }}
+                    className={`h-10 w-full pl-6 pr-3 border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-right text-xs font-mono font-medium focus:border-tertiary outline-none ${errors.totalCost ? 'border-error' : 'border-outline-variant'}`}
                   />
                 </div>
+                {errors.totalCost && <p className="text-[10px] font-sans text-error font-semibold">{errors.totalCost}</p>}
               </div>
 
+              <fieldset disabled={!isDraft} className="border-0 p-0 m-0 space-y-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] font-bold text-on-surface-variant font-sans">
                   Anticipo ($)
                 </label>
                 <div className="relative">
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-sans text-on-surface-variant">
-                    $
-                  </span>
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-sans text-on-surface-variant">$</span>
                   <input
                     type="number"
                     min="0"
+                    step="0.01"
                     readOnly={!isDraft}
                     placeholder="0.00"
-                    value={
-                      activeRepair.advancePaid === 0
-                        ? ""
-                        : activeRepair.advancePaid
-                    }
+                    value={activeRepair.advancePaid === 0 ? "" : activeRepair.advancePaid}
                     onChange={(e) => {
                       if (!isDraft) return;
                       const advVal = Math.max(0, Number(e.target.value) || 0);
                       onUpdateRepair(activeRepair.id, {
                         advancePaid: advVal,
-                        remainingBalance: Math.max(
-                          0,
-                          activeRepair.totalCost - advVal,
-                        ),
+                        remainingBalance: Math.max(0, activeRepair.totalCost - advVal - (activeRepair.abonosPaid || 0)),
                       });
                     }}
-                    className="h-10 w-full pl-6 pr-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-[#ffffff] text-right text-xs font-mono font-bold text-primary focus:border-tertiary outline-none"
+                    className="h-10 w-full pl-6 pr-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-right text-xs font-mono font-bold text-primary focus:border-tertiary outline-none"
                   />
                 </div>
+              </div>
+              </fieldset>
+
+              {/* abonosPaid — always editable */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-on-surface-variant font-sans">
+                  Abonos ($)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-sans text-on-surface-variant">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    readOnly={isDelivered}
+                    value={activeRepair.abonosPaid === 0 ? "" : activeRepair.abonosPaid}
+                    onChange={(e) => {
+                      if (isDelivered) return;
+                      const abVal = Math.max(0, Number(e.target.value) || 0);
+                      const totalPaid = (activeRepair.advancePaid || 0) + abVal;
+                      onUpdateRepair(activeRepair.id, {
+                        abonosPaid: abVal,
+                        remainingBalance: Math.max(0, activeRepair.totalCost - (activeRepair.advancePaid || 0) - abVal),
+                      });
+                      if (totalPaid > activeRepair.totalCost) setError('abonosPaid', 'Los abonos no pueden superar el saldo pendiente');
+                      else clearError('abonosPaid');
+                    }}
+                    className={`h-10 w-full pl-6 pr-3 border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-right text-xs font-mono font-bold text-tertiary focus:border-tertiary outline-none ${errors.abonosPaid ? 'border-error' : 'border-outline-variant'}`}
+                  />
+                </div>
+                {errors.abonosPaid && <p className="text-[10px] font-sans text-error font-semibold">{errors.abonosPaid}</p>}
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex justify-between items-center select-none font-sans font-medium text-xs text-on-surface-variant">
@@ -586,7 +697,6 @@ export default function RepairsView({
               </div>
             </div>
           </div>
-          </fieldset>
 
           {/* Section: Action Triggers & Note Footnotes */}
           <div className="flex flex-col gap-4">
@@ -629,7 +739,26 @@ export default function RepairsView({
                 Vista Previa
               </button>
 
-              {isDraft && (
+              {isDelivered ? (
+                <div className="w-full flex items-center justify-center gap-1 text-xs text-emerald-700 font-bold bg-emerald-50 py-2.5 rounded border border-emerald-200 select-none">
+                  <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                  Entregado
+                </div>
+              ) : deliveryConfirmPending ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    // First pass: let App.tsx save (auto-sets warranty if status is delivered)
+                    await onSaveRepairOrder(activeRepair.id);
+                    // Only after the save attempt, clear the pending state
+                    setDeliveryConfirmPending(false);
+                  }}
+                  className="w-full bg-error hover:bg-error/90 text-white text-xs font-bold py-2.5 rounded transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer outline-none animate-pulse"
+                >
+                  <span className="material-symbols-outlined text-[16px]">warning</span>
+                  Confirmar Entrega
+                </button>
+              ) : (
                 <button
                   type="button"
                   onClick={() => onSaveRepairOrder(activeRepair.id)}
@@ -638,16 +767,8 @@ export default function RepairsView({
                   <span className="material-symbols-outlined text-[16px]">
                     save
                   </span>
-                  Guardar Nota
+                  {isDraft ? 'Guardar Nota' : 'Guardar Cambios'}
                 </button>
-              )}
-              {!isDraft && (
-                <div className="w-full flex items-center justify-center gap-1 text-xs text-on-surface-variant font-semibold bg-surface-container-low/40 py-2.5 rounded border border-dashed border-outline-variant select-none">
-                  <span className="material-symbols-outlined text-[16px]">
-                    lock
-                  </span>
-                  Solo Lectura
-                </div>
               )}
             </div>
           </div>

@@ -21,12 +21,14 @@ export interface RepairOrder {
   coverLeft: boolean;
   receivingCondition: string;
   problemReported: string;
+  internalNotes: string;
   status: RepairStatus;
   technician: string;
   deliveryDate: string;
   warrantyEnd: string;
   totalCost: number;
   advancePaid: number;
+  abonosPaid: number;
   remainingBalance: number;
   footnote: string;
   createdAt: string;
@@ -47,6 +49,7 @@ export interface LogEntry {
   description: string;
   amount: number;
   status: 'Advance' | 'Paid' | 'Outflow';
+  created_at?: string;
 }
 
 export interface CashRegistryMovement {
@@ -57,4 +60,4 @@ export interface CashRegistryMovement {
   time: string;
 }
 
-export type ActiveView = 'login' | 'dashboard' | 'pos' | 'repairs' | 'reports' | 'settings';
+export type ActiveView = 'login' | 'dashboard' | 'pos' | 'repairs' | 'reports' | 'settings' | 'arqueo';

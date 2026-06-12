@@ -2,6 +2,9 @@ import React, { useState, useMemo } from 'react';
 import type { CartItem } from '../types';
 import type { Product } from '../lib/supabase-types';
 import InventoryPanel from './InventoryPanel';
+import DenominationPad from './DenominationPad';
+import { DENOMS, emptyCounts, calcTotal, calcChange } from '../lib/denominations';
+import type { DenomCounts } from '../lib/denominations';
 
 function onlyText(v: string) {
   return v.replace(/[0-9]/g, '');
@@ -50,14 +53,16 @@ export default function POSView({
   const [cashModalOpen, setCashModalOpen] = useState(false);
 
   // Pay modal inputs
-  const [cashLocal, setCashLocal] = useState('300.00');
+  const [cashLocal, setCashLocal] = useState('0.00');
   const [cardLocal, setCardLocal] = useState('0.00');
   const [cashUsd, setCashUsd] = useState('0.00');
+  const [calcCounts, setCalcCounts] = useState<DenomCounts>(emptyCounts);
 
   // Cash movement inputs
   const [cashMoveType, setCashMoveType] = useState<'in' | 'out'>('in');
   const [cashMoveAmount, setCashMoveAmount] = useState('');
   const [cashMoveNote, setCashMoveNote] = useState('');
+  const [cashMoveCounts, setCashMoveCounts] = useState<DenomCounts>(emptyCounts);
 
   // Stock validation helper
   const stockInfo = useMemo(() => {
@@ -196,7 +201,10 @@ export default function POSView({
       showToast('Estructura vacía', 'Agrega algún producto antes de cobrar.', 'error');
       return;
     }
-    setCashLocal((Math.ceil(total / 10) * 10).toFixed(2));
+    setCashLocal('0.00');
+    setCardLocal('0.00');
+    setCashUsd('0.00');
+    setCalcCounts(emptyCounts());
     setPayModalOpen(true);
   };
 
@@ -232,13 +240,19 @@ export default function POSView({
       showToast('Cantidad Inválida', 'El monto debe ser mayor a 0.', 'error');
       return;
     }
+    const parts = DENOMS
+      .filter(d => (cashMoveCounts[d.value] || 0) > 0)
+      .map(d => `${cashMoveCounts[d.value]}× ${d.label}`)
+      .join(', ');
+    const noteWithDenoms = cashMoveNote.trim() + (parts ? ` | ${parts}` : '');
     if (!cashMoveNote.trim()) {
       showToast('Falta Nota', 'Describí el motivo del movimiento.', 'error');
       return;
     }
-    onRegisterCashMovement(cashMoveType, amount, cashMoveNote.trim());
+    onRegisterCashMovement(cashMoveType, amount, noteWithDenoms);
     setCashMoveAmount('');
     setCashMoveNote('');
+    setCashMoveCounts(emptyCounts());
     closeCashModal();
   };
 
@@ -511,8 +525,41 @@ export default function POSView({
             <h3 className="text-lg font-sans font-bold text-on-surface">Procesar Pago</h3>
             <p className="text-xs font-sans text-on-surface-variant font-semibold mt-1">Total a cobrar: <span className="text-primary font-bold">${total.toFixed(2)}</span></p>
 
-            <div className="mt-5 space-y-4">
-              <InputField label="Efectivo (MXN)" value={cashLocal} onChange={setCashLocal} />
+            {/* OXXO-style denomination pad */}
+            <div className="mt-5">
+              <DenominationPad counts={calcCounts} onChange={(c) => {
+                setCalcCounts(c);
+                setCashLocal(String(calcTotal(c)));
+              }} />
+              {(() => {
+                const recv = calcTotal(calcCounts);
+                const { change, short } = calcChange(recv + Math.max(0, Number(cardLocal) || 0) + (Math.max(0, Number(cashUsd) || 0) * 18.50), total);
+                return (
+                  <div className="mt-2 space-y-1 text-xs font-sans border-t border-outline-variant pt-2">
+                    {recv > 0 && (
+                      <div className="flex justify-between font-semibold text-on-surface-variant">
+                        <span>Efectivo recibido</span>
+                        <span className="font-bold text-on-surface">${recv.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {short > 0 ? (
+                      <div className="flex justify-between text-error font-bold">
+                        <span>Saldo pendiente</span>
+                        <span>${short.toFixed(2)}</span>
+                      </div>
+                    ) : change > 0 ? (
+                      <div className="flex justify-between text-tertiary font-bold">
+                        <span>Cambio a entregar</span>
+                        <span>${change.toFixed(2)}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Card and USD secondary inputs */}
+            <div className="mt-4 grid grid-cols-2 gap-3">
               <InputField label="Tarjeta (MXN)" value={cardLocal} onChange={setCardLocal} />
               <InputField label="Dólares (USD)" value={cashUsd} onChange={setCashUsd} />
             </div>
@@ -582,7 +629,13 @@ export default function POSView({
                   </button>
                 </div>
               </div>
-              <InputField label="Monto" value={cashMoveAmount} onChange={setCashMoveAmount} />
+              <div className="border border-outline-variant rounded-md p-3">
+                <p className="text-[10px] font-bold font-sans text-on-surface-variant uppercase tracking-wider mb-2">Desglose por denominación</p>
+                <DenominationPad counts={cashMoveCounts} onChange={(c) => {
+                  setCashMoveCounts(c);
+                  setCashMoveAmount(String(calcTotal(c)));
+                }} />
+              </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider font-sans">Nota</label>
                 <input

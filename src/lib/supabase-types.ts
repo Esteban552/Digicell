@@ -80,12 +80,14 @@ export interface RepairOrder {
   cover_left: boolean;
   receiving_condition: string;
   problem_reported: string;
+  internal_notes: string;
   status: 'in_review' | 'waiting_parts' | 'repaired' | 'delivered';
   technician: string;
   delivery_date: string;
   warranty_end: string;
   total_cost: number;
   advance_paid: number;
+  abonos_paid: number;
   remaining_balance: number;
   footnote: string;
   created_by: string | null;
@@ -147,4 +149,5 @@ export interface ActivityLogEntry {
   description: string;
   amount: number;
   status: string;
+  created_at: string;
 }

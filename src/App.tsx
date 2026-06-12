@@ -15,6 +15,7 @@ import POSView from './components/POSView';
 import RepairsView from './components/RepairsView';
 import ReportsView from './components/ReportsView';
 import SettingsView from './components/SettingsView';
+import ArqueoCaja from './components/ArqueoCaja';
 import Toast from './components/Toast';
 
 // Data & Types Imports
@@ -37,10 +38,11 @@ function blankRepair(): RepairOrder {
     deviceBrand: 'Apple', deviceModel: '', deviceSerial: '',
     devicePassword: '', deviceColor: '', powersOn: 'Yes',
     batteryPercent: '', chargerLeft: false, coverLeft: false,
-    receivingCondition: '', problemReported: '', status: 'in_review',
+    receivingCondition: '', problemReported: '', internalNotes: '',
+    status: 'in_review',
     technician: 'Unassigned', deliveryDate: today,
     warrantyEnd: new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0],
-    totalCost: 0, advancePaid: 0, remainingBalance: 0,
+    totalCost: 0, advancePaid: 0, abonosPaid: 0, remainingBalance: 0,
     footnote: 'Garantía de 30 días en piezas reemplazadas. No nos hacemos responsables por equipos olvidados después de 60 días.',
     createdAt: new Date().toISOString(),
   };
@@ -116,7 +118,7 @@ export default function App() {
   }, [dbRepairs, repairsLoading]);
 
   const { data: logs, refetch: refetchLogs } = useActivityLogs();
-  const { add: addCashMovement } = useCashMovements();
+  const { data: cashMovements, add: addCashMovement } = useCashMovements();
   const { data: settings, update: updateSetting } = useSettings();
   const { data: products, refetch: refetchProducts } = useProducts();
   const [cart, setCart] = useState<CartItem[]>(INITIAL_CART);
@@ -195,16 +197,34 @@ export default function App() {
   // Finalize/Save the repair order, syncing to Supabase
   const handleSaveRepairOrder = async (id: string) => {
     // Resolve the repair data (draft or existing)
-    const orderRef = id === DRAFT_ID ? draftRepair : repairs.find(r => r.id === id);
+    let orderRef = id === DRAFT_ID ? draftRepair : repairs.find(r => r.id === id);
     if (!orderRef) return;
+
+    // When saving with 'delivered' status, auto-assign warranty to 30 days
+    if (orderRef.status === 'delivered') {
+      const thirtyDaysFromNow = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+      if (id === DRAFT_ID) {
+        setDraftRepair(prev => ({ ...prev, warrantyEnd: thirtyDaysFromNow }));
+      } else {
+        setRepairs(prev => prev.map(r => r.id === id ? { ...r, warrantyEnd: thirtyDaysFromNow } : r));
+      }
+      orderRef = { ...orderRef, warrantyEnd: thirtyDaysFromNow };
+    }
 
     // Validations
     const errors: string[] = [];
     if (!orderRef.clientName?.trim()) errors.push('El nombre del cliente es obligatorio.');
+    if (orderRef.clientPhone && !/^\d{10}$/.test(orderRef.clientPhone.replace(/\D/g, ''))) errors.push('El teléfono debe tener 10 dígitos.');
+    if (orderRef.clientEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(orderRef.clientEmail)) errors.push('El correo electrónico no es válido.');
     if (orderRef.totalCost < 0) errors.push('El costo total no puede ser negativo.');
     if (orderRef.advancePaid < 0) errors.push('El anticipo no puede ser negativo.');
     if (orderRef.advancePaid > orderRef.totalCost) errors.push('El anticipo no puede superar el costo total.');
+    if (orderRef.abonosPaid < 0) errors.push('Los abonos no pueden ser negativos.');
+    if ((orderRef.abonosPaid || 0) + orderRef.advancePaid > orderRef.totalCost) errors.push('La suma de anticipo + abonos no puede superar el costo total.');
     if (orderRef.totalCost > 0 && !orderRef.deviceModel?.trim()) errors.push('Si hay costo, indicá el modelo del equipo.');
+    if (!orderRef.deliveryDate?.trim()) errors.push('La fecha de entrega es obligatoria.');
+    if (!orderRef.warrantyEnd?.trim()) errors.push('La fecha de fin de garantía es obligatoria.');
+    if (!orderRef.problemReported?.trim()) errors.push('El detalle del problema es obligatorio.');
 
     if (errors.length > 0) {
       showToast('Corregí los errores', errors.join(' '), 'error');
@@ -229,12 +249,14 @@ export default function App() {
         cover_left: draftRepair.coverLeft,
         receiving_condition: draftRepair.receivingCondition,
         problem_reported: draftRepair.problemReported,
+        internal_notes: draftRepair.internalNotes,
         status: draftRepair.status,
         technician: draftRepair.technician,
         delivery_date: draftRepair.deliveryDate,
-        warranty_end: draftRepair.warrantyEnd,
+        warranty_end: orderRef.warrantyEnd,
         total_cost: draftRepair.totalCost,
         advance_paid: draftRepair.advancePaid,
+        abonos_paid: draftRepair.abonosPaid,
         footnote: draftRepair.footnote,
         created_by: user?.id ?? null,
       };
@@ -265,13 +287,15 @@ export default function App() {
         coverLeft: draftRepair.coverLeft,
         receivingCondition: draftRepair.receivingCondition,
         problemReported: draftRepair.problemReported,
+        internalNotes: draftRepair.internalNotes,
         status: draftRepair.status,
         technician: draftRepair.technician,
         deliveryDate: draftRepair.deliveryDate,
         warrantyEnd: draftRepair.warrantyEnd,
         totalCost: draftRepair.totalCost,
         advancePaid: draftRepair.advancePaid,
-        remainingBalance: Math.max(0, draftRepair.totalCost - draftRepair.advancePaid),
+        abonosPaid: draftRepair.abonosPaid,
+        remainingBalance: Math.max(0, draftRepair.totalCost - draftRepair.advancePaid - draftRepair.abonosPaid),
         footnote: draftRepair.footnote,
         createdAt: row.created_at,
       };
@@ -575,9 +599,17 @@ export default function App() {
             {currentView === 'reports' && (
               <ReportsView
                 logs={logs}
+                repairs={repairs}
                 totalSalesSum={calculatedStats.totalSales}
                 totalAdvancesSum={calculatedStats.totalAdvances}
                 totalCashSum={calculatedStats.totalCashInRegister}
+                showToast={showToast}
+              />
+            )}
+
+            {currentView === 'arqueo' && (
+              <ArqueoCaja
+                movements={cashMovements}
                 showToast={showToast}
               />
             )}
