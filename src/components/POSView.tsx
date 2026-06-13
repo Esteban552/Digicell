@@ -300,7 +300,9 @@ export default function POSView({
                     type="text"
                     value={itemName}
                     onChange={(e) => {
-                      setItemName(e.target.value);
+                      const raw = e.target.value;
+                      const cleaned = raw.replace(/[^a-zA-ZáéíóúüñÁÉÍÓÚÜÑ0-9\s]/g, '').slice(0, 25);
+                      setItemName(cleaned);
                       setNameError('');
                       setShowSuggestions(true);
                     }}
@@ -309,6 +311,7 @@ export default function POSView({
                     placeholder="Nombre del producto"
                     className={`h-10 w-full border ${nameError ? 'border-error' : 'border-outline'} rounded px-3 focus:border-tertiary outline-none text-sm font-sans`}
                     autoComplete="off"
+                    maxLength={25}
                   />
                   {nameError && (
                     <p className="text-[10px] font-sans text-error font-semibold mt-0.5">{nameError}</p>
@@ -527,9 +530,9 @@ export default function POSView({
       {/* Payment Modal Overlay */}
       {payModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={closePayModal}>
-          <div className="bg-white rounded-xl border border-outline-variant shadow-xl w-[420px] p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-sans font-bold text-on-surface">Procesar Pago</h3>
-            <p className="text-xs font-sans text-on-surface-variant font-semibold mt-1">Total a cobrar: <span className="text-primary font-bold">${total.toFixed(2)}</span></p>
+          <div className="bg-white rounded-xl border border-outline-variant shadow-xl w-[560px] p-8" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-sans font-bold text-on-surface">Procesar Pago</h3>
+            <p className="text-sm font-sans text-on-surface-variant font-semibold mt-1.5">Total a cobrar: <span className="text-primary font-bold text-base">${total.toFixed(2)}</span></p>
 
             {/* OXXO-style denomination pad */}
             <div className="mt-5">
@@ -541,7 +544,7 @@ export default function POSView({
                 const recv = calcTotal(calcCounts);
                 const { change, short } = calcChange(recv + Math.max(0, Number(cardLocal) || 0) + (Math.max(0, Number(cashUsd) || 0) * exchangeRate), total);
                 return (
-                  <div className="mt-2 space-y-1 text-xs font-sans border-t border-outline-variant pt-2">
+                  <div className="mt-3 space-y-1.5 text-sm font-sans border-t border-outline-variant pt-3">
                     {recv > 0 && (
                       <div className="flex justify-between font-semibold text-on-surface-variant">
                         <span>Efectivo recibido</span>
@@ -598,11 +601,11 @@ export default function POSView({
               );
             })()}
 
-            <div className="flex gap-2 mt-5">
-              <button onClick={closePayModal} className="flex-1 h-10 border border-outline-variant rounded-md text-xs font-semibold font-sans outline-none cursor-pointer">
+            <div className="flex gap-3 mt-6">
+              <button onClick={closePayModal} className="flex-1 h-12 border border-outline-variant rounded-md text-sm font-semibold font-sans outline-none cursor-pointer">
                 Cancelar
               </button>
-              <button onClick={handleProcessPay} className="flex-1 h-10 bg-primary hover:bg-primary-container text-white rounded-md text-xs font-bold font-sans shadow-sm outline-none cursor-pointer">
+              <button onClick={handleProcessPay} className="flex-1 h-12 bg-primary hover:bg-primary-container text-white rounded-md text-sm font-bold font-sans shadow-sm outline-none cursor-pointer">
                 Confirmar Venta
               </button>
             </div>

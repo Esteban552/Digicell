@@ -4,8 +4,6 @@ import { ActiveView } from '../types';
 interface DashboardViewProps {
   onViewChange: (view: ActiveView) => void;
   onLogout: () => void;
-  totalsSalesVal: number;
-  completedRepairsCount: number;
   urgentCount: number;
   inProgressCount: number;
 }
@@ -13,8 +11,6 @@ interface DashboardViewProps {
 export default function DashboardView({
   onViewChange,
   onLogout,
-  totalsSalesVal,
-  completedRepairsCount,
   urgentCount,
   inProgressCount
 }: DashboardViewProps) {
@@ -134,39 +130,6 @@ export default function DashboardView({
             </p>
           </div>
         </button>
-
-      </div>
-
-      {/* Quick Stats Row */}
-      <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 select-none">
-
-        <div className="bg-white p-5 rounded-lg border border-outline-variant flex items-center justify-between shadow-sm">
-          <div>
-            <p className="text-[10px] font-sans font-bold text-on-surface-variant uppercase tracking-wider">
-              Ventas del Día
-            </p>
-            <p className="text-lg font-bold text-on-surface font-sans leading-tight mt-1">
-              ${totalsSalesVal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-          </div>
-          <span className="material-symbols-outlined text-tertiary opacity-40 text-[26px]">
-            payments
-          </span>
-        </div>
-
-        <div className="bg-white p-5 rounded-lg border border-outline-variant flex items-center justify-between shadow-sm">
-          <div>
-            <p className="text-[10px] font-sans font-bold text-on-surface-variant uppercase tracking-wider">
-              Reparaciones Completadas
-            </p>
-            <p className="text-lg font-bold text-on-surface font-sans leading-tight mt-1">
-              {completedRepairsCount}
-            </p>
-          </div>
-          <span className="material-symbols-outlined text-primary opacity-40 text-[26px]">
-            task_alt
-          </span>
-        </div>
 
       </div>
 

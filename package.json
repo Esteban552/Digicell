@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "deploy": "npm run build && ssh -p 2222 esteban@2.25.170.208 \"rm -rf /var/www/digicell-pos/*\" && scp -P 2222 -r dist/. esteban@2.25.170.208:/var/www/digicell-pos/ && ssh -p 2222 esteban@2.25.170.208 \"chmod -R 755 /var/www/digicell-pos\""
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

@@ -55,6 +55,8 @@ export default function RepairsView({
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
+  const today = new Date().toISOString().split('T')[0];
+
   // Delivery confirmation guard — prevents accidental lock when picking "Entregado"
   const [deliveryConfirmPending, setDeliveryConfirmPending] = useState(false);
 
@@ -221,7 +223,7 @@ export default function RepairsView({
                   value={activeRepair.clientName}
                   readOnly={!isDraft}
                   onChange={(e) => {
-                    const v = e.target.value.replace(/[0-9]/g, '');
+                    const v = e.target.value.replace(/[^a-zA-ZáéíóúüñÁÉÍÓÚÜÑ\s]/g, '').slice(0, 50);
                     handleUpdateField("clientName", v);
                     if (v.trim()) clearError('clientName');
                   }}
@@ -231,6 +233,7 @@ export default function RepairsView({
                   }}
                   placeholder="Juan Pérez"
                   className={`h-10 w-full px-3 border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none transition-all font-sans font-medium ${errors.clientName ? 'border-error' : 'border-outline-variant'}`}
+                  maxLength={50}
                 />
                 {errors.clientName && <p className="text-[10px] font-sans text-error font-semibold">{errors.clientName}</p>}
               </div>
@@ -244,7 +247,7 @@ export default function RepairsView({
                   value={activeRepair.clientEmail}
                   readOnly={!isDraft}
                   onChange={(e) => {
-                    handleUpdateField("clientEmail", e.target.value);
+                    handleUpdateField("clientEmail", e.target.value.slice(0, 50));
                     if (errors.clientEmail) clearError('clientEmail');
                   }}
                   onBlur={() => {
@@ -254,6 +257,7 @@ export default function RepairsView({
                   }}
                   placeholder="cliente@correo.com"
                   className={`h-10 w-full px-3 border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none transition-all font-sans ${errors.clientEmail ? 'border-error' : 'border-outline-variant'}`}
+                  maxLength={50}
                 />
                 {errors.clientEmail && <p className="text-[10px] font-sans text-error font-semibold">{errors.clientEmail}</p>}
               </div>
@@ -301,7 +305,8 @@ export default function RepairsView({
                   value={activeRepair.deviceModel}
                   readOnly={!isDraft}
                   onChange={(e) => {
-                    handleUpdateField("deviceModel", e.target.value);
+                    const v = e.target.value.replace(/[^a-zA-ZáéíóúüñÁÉÍÓÚÜÑ0-9\s\-\.\/]/g, '').slice(0, 30);
+                    handleUpdateField("deviceModel", v);
                     if (errors.deviceModel) clearError('deviceModel');
                   }}
                   onBlur={() => {
@@ -309,7 +314,8 @@ export default function RepairsView({
                     else clearError('deviceModel');
                   }}
                   placeholder="Ej: iPhone 13 Pro"
-                  className={`h-10 w-full px-3 border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans font-medium ${errors.deviceModel ? 'border-error' : 'border-outline-variant'}`}
+                   className={`h-10 w-full px-3 border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans font-medium ${errors.deviceModel ? 'border-error' : 'border-outline-variant'}`}
+                  maxLength={30}
                 />
                 {errors.deviceModel && <p className="text-[10px] font-sans text-error font-semibold">{errors.deviceModel}</p>}
               </div>
@@ -323,10 +329,11 @@ export default function RepairsView({
                   value={activeRepair.deviceSerial}
                   readOnly={!isDraft}
                   onChange={(e) =>
-                    handleUpdateField("deviceSerial", e.target.value)
+                    handleUpdateField("deviceSerial", e.target.value.replace(/[^a-zA-ZáéíóúüñÁÉÍÓÚÜÑ0-9]/g, '').slice(0, 20))
                   }
                   placeholder="15 Digits"
                   className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface font-mono focus:border-tertiary outline-none font-sans"
+                  maxLength={20}
                 />
               </div>
 
@@ -339,10 +346,11 @@ export default function RepairsView({
                   value={activeRepair.devicePassword}
                   readOnly={!isDraft}
                   onChange={(e) =>
-                    handleUpdateField("devicePassword", e.target.value)
+                    handleUpdateField("devicePassword", e.target.value.slice(0, 20))
                   }
-                  placeholder="PIN/Patrón"
+                   placeholder="PIN/Patrón"
                   className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans"
+                  maxLength={20}
                 />
               </div>
 
@@ -355,10 +363,11 @@ export default function RepairsView({
                   value={activeRepair.deviceColor}
                   readOnly={!isDraft}
                   onChange={(e) =>
-                    handleUpdateField("deviceColor", e.target.value)
+                    handleUpdateField("deviceColor", e.target.value.replace(/[^a-zA-ZáéíóúüñÁÉÍÓÚÜÑ\s]/g, '').slice(0, 15))
                   }
                   placeholder="Ej: Graphite / Space Grey"
                   className="h-10 w-full px-3 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans"
+                  maxLength={15}
                 />
               </div>
             </div>
@@ -470,10 +479,11 @@ export default function RepairsView({
                   readOnly={!isDraft}
                   value={activeRepair.receivingCondition}
                   onChange={(e) =>
-                    handleUpdateField("receivingCondition", e.target.value)
+                    handleUpdateField("receivingCondition", e.target.value.slice(0, 150))
                   }
                   placeholder="Detalle de condiciones físicas..."
                   className="w-full border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface p-3 h-24 focus:border-tertiary outline-none resize-none leading-relaxed font-sans"
+                  maxLength={150}
                 />
               </div>
 
@@ -485,8 +495,9 @@ export default function RepairsView({
                   readOnly={!isDraft}
                   value={activeRepair.problemReported}
                   onChange={(e) => {
-                    handleUpdateField("problemReported", e.target.value);
-                    if (e.target.value.trim()) clearError('problemReported');
+                    const v = e.target.value.slice(0, 150);
+                    handleUpdateField("problemReported", v);
+                    if (v.trim()) clearError('problemReported');
                   }}
                   onBlur={() => {
                     if (!activeRepair.problemReported?.trim()) setError('problemReported', 'El detalle del problema es obligatorio');
@@ -494,6 +505,7 @@ export default function RepairsView({
                   }}
                   placeholder="Detalle de la falla y trabajo requerido..."
                   className={`w-full border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface p-3 h-24 focus:border-tertiary outline-none resize-none leading-relaxed font-sans font-medium ${errors.problemReported ? 'border-error' : 'border-outline-variant'}`}
+                  maxLength={150}
                 />
                 {errors.problemReported && <p className="text-[10px] font-sans text-error font-semibold">{errors.problemReported}</p>}
               </div>
@@ -509,9 +521,10 @@ export default function RepairsView({
               <textarea
                 readOnly={isDelivered}
                 value={activeRepair.internalNotes}
-                onChange={(e) => handleUpdateField('internalNotes', e.target.value)}
+                onChange={(e) => handleUpdateField('internalNotes', e.target.value.slice(0, 350))}
                 placeholder="Mensajes entre técnicos sobre el avance del trabajo..."
                 className="w-full border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface p-3 h-20 focus:border-tertiary outline-none resize-none leading-relaxed font-sans"
+                maxLength={350}
               />
             </div>
           </div>
@@ -575,12 +588,14 @@ export default function RepairsView({
                   type="date"
                   value={activeRepair.deliveryDate}
                   readOnly={!isDraft}
+                  min={today}
                   onChange={(e) => {
                     handleUpdateField("deliveryDate", e.target.value);
                     if (errors.deliveryDate) clearError('deliveryDate');
                   }}
                   onBlur={() => {
                     if (!activeRepair.deliveryDate?.trim()) setError('deliveryDate', 'La fecha de entrega es obligatoria');
+                    else if (activeRepair.deliveryDate < today) setError('deliveryDate', 'No puede ser una fecha pasada');
                     else clearError('deliveryDate');
                   }}
                   className={`h-10 w-full px-3 border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs font-medium text-on-surface focus:border-tertiary outline-none font-sans ${errors.deliveryDate ? 'border-error' : 'border-outline-variant'}`}
@@ -596,12 +611,14 @@ export default function RepairsView({
                   type="date"
                   value={activeRepair.warrantyEnd}
                   readOnly={!isDraft}
+                  min={today}
                   onChange={(e) => {
                     handleUpdateField("warrantyEnd", e.target.value);
                     if (errors.warrantyEnd) clearError('warrantyEnd');
                   }}
                   onBlur={() => {
                     if (!activeRepair.warrantyEnd?.trim()) setError('warrantyEnd', 'La fecha de garantía es obligatoria');
+                    else if (activeRepair.warrantyEnd < today) setError('warrantyEnd', 'No puede ser una fecha pasada');
                     else clearError('warrantyEnd');
                   }}
                   className={`h-10 w-full px-3 border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none font-sans ${errors.warrantyEnd ? 'border-error' : 'border-outline-variant'}`}
