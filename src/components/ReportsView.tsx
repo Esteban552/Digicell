@@ -3,8 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { LogEntry, RepairOrder } from '../types';
+
+const ITEMS_PER_PAGE = 20;
 
 interface ReportsViewProps {
   logs: LogEntry[];
@@ -46,6 +48,10 @@ export default function ReportsView({
   const [filterQuery, setFilterQuery] = useState('');
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [activeFilter, setActiveFilter] = useState<TypeFilter>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Reset to page 1 when filters or date change
+  useEffect(() => { setCurrentPage(1); }, [filterQuery, selectedDate, activeFilter]);
 
   const logIsOnDate = (log: LogEntry, date: string) =>
     (log.created_at && log.created_at.startsWith(date)) || (log.time && log.time.startsWith(date));
@@ -70,6 +76,13 @@ export default function ReportsView({
     }
     return result;
   }, [dateFilteredLogs, activeFilter, filterQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedLogs = useMemo(() => {
+    const start = (safePage - 1) * ITEMS_PER_PAGE;
+    return filteredLogs.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredLogs, safePage]);
 
   const todayStats = useMemo(() => {
     const sales = dateFilteredLogs.filter(l => l.type === 'POS Sale').reduce((a, c) => a + c.amount, 0);
@@ -268,7 +281,7 @@ export default function ReportsView({
               </tr>
             </thead>
             <tbody className="text-xs select-text font-sans">
-              {filteredLogs.map((log) => (
+              {paginatedLogs.map((log) => (
                 <tr
                   key={log.id}
                   className="even:bg-slate-50/40 hover:bg-slate-100/30 transition-colors border-b border-slate-100 last:border-0"
@@ -312,7 +325,7 @@ export default function ReportsView({
                   </td>
                 </tr>
               ))}
-              {filteredLogs.length === 0 && (
+              {paginatedLogs.length === 0 && (
                 <tr>
                   <td colSpan={5} className="p-8 text-center text-slate-400 font-sans font-semibold">
                     No se encontraron registros para el {selectedDate}. {activeFilter !== 'all' && 'Cambiá el filtro o la fecha.'}
@@ -324,14 +337,40 @@ export default function ReportsView({
         </div>
 
         <div className="p-3 border-t border-slate-200 bg-slate-50 flex justify-between items-center select-none font-sans text-[11px] leading-normal">
-          <span className="text-slate-500 font-medium">Mostrando {filteredLogs.length} de {dateFilteredLogs.length} registros del {selectedDate}</span>
-          <div className="flex gap-1">
-            <button className="w-8 h-8 rounded border border-slate-300 flex items-center justify-center text-slate-400 hover:bg-white disabled:opacity-50" disabled>
+          <span className="text-slate-500 font-medium">
+            Mostrando {(safePage - 1) * ITEMS_PER_PAGE + 1}-{Math.min(safePage * ITEMS_PER_PAGE, filteredLogs.length)} de {filteredLogs.length} registros del {selectedDate}
+          </span>
+          <div className="flex gap-1 items-center">
+            <button
+              disabled={safePage <= 1}
+              onClick={() => setCurrentPage(p => p - 1)}
+              className="w-8 h-8 rounded border border-slate-300 flex items-center justify-center text-slate-500 hover:bg-white disabled:opacity-30 disabled:cursor-default cursor-pointer"
+            >
               <span className="material-symbols-outlined text-[16px]">chevron_left</span>
             </button>
-            <button className="w-8 h-8 rounded border border-slate-300 flex items-center justify-center text-slate-700 bg-white font-bold">1</button>
-            <button className="w-8 h-8 rounded border border-transparent flex items-center justify-center text-slate-500 hover:bg-slate-200" disabled>2</button>
-            <button className="w-8 h-8 rounded border border-slate-300 flex items-center justify-center text-slate-400 hover:bg-white" disabled>
+            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+              const startPage = Math.max(1, Math.min(safePage - 2, totalPages - 4));
+              const page = startPage + i;
+              if (page > totalPages) return null;
+              return (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`w-8 h-8 rounded border flex items-center justify-center text-xs font-bold cursor-pointer ${
+                    page === safePage
+                      ? 'border-primary bg-primary text-white'
+                      : 'border-slate-300 text-slate-600 hover:bg-white'
+                  }`}
+                >
+                  {page}
+                </button>
+              );
+            })}
+            <button
+              disabled={safePage >= totalPages}
+              onClick={() => setCurrentPage(p => p + 1)}
+              className="w-8 h-8 rounded border border-slate-300 flex items-center justify-center text-slate-500 hover:bg-white disabled:opacity-30 disabled:cursor-default cursor-pointer"
+            >
               <span className="material-symbols-outlined text-[16px]">chevron_right</span>
             </button>
           </div>
