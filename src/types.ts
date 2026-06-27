@@ -60,4 +60,6 @@ export interface CashRegistryMovement {
   time: string;
 }
 
+export type UserRole = 'admin' | 'technician';
+
 export type ActiveView = 'login' | 'dashboard' | 'pos' | 'repairs' | 'reports' | 'settings' | 'arqueo';

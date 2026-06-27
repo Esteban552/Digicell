@@ -55,7 +55,7 @@ export default function LoginView() {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { display_name: displayName.trim() } },
+          options: { data: { display_name: displayName.trim(), role: 'technician' } },
         });
 
         if (error) {

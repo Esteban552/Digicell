@@ -26,9 +26,15 @@ import { useCashMovements } from './hooks/useCashMovements';
 import { useActivityLogs } from './hooks/useActivityLogs';
 import { useSettings } from './hooks/useSettings';
 import { useProducts } from './hooks/useProducts';
-import { ActiveView, RepairOrder, CartItem } from './types';
+import { ActiveView, RepairOrder, CartItem, UserRole } from './types';
+import { useProfile } from './hooks/useProfile';
 
 const DRAFT_ID = 'draft';
+
+const VIEWS_BY_ROLE: Record<UserRole, ActiveView[]> = {
+  admin: ['dashboard', 'pos', 'repairs', 'reports', 'settings', 'arqueo'],
+  technician: ['dashboard', 'repairs', 'reports'],
+};
 
 function blankRepair(): RepairOrder {
   const today = new Date().toISOString().split('T')[0];
@@ -92,14 +98,27 @@ export default function App() {
   const userName = session?.user?.user_metadata?.display_name ?? session?.user?.email?.split('@')[0] ?? 'Invitado';
   const userId = session?.user?.id ?? null;
 
+  // Load user profile from DB to get role
+  const { profile, loading: profileLoading } = useProfile(userId);
+  const userRole: UserRole = profile?.role ?? 'technician';
+
   // Active navigation view state
   const [currentView, setCurrentView] = useState<ActiveView>('dashboard');
 
   // Navigate based on auth state
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || profileLoading) return;
     setCurrentView(session ? 'dashboard' : 'login');
-  }, [session, authLoading]);
+  }, [session, authLoading, profileLoading]);
+
+  // Redirect if current view is not allowed for the user's role
+  useEffect(() => {
+    if (authLoading || profileLoading || !session) return;
+    const allowed = VIEWS_BY_ROLE[userRole];
+    if (!allowed.includes(currentView)) {
+      setCurrentView('dashboard');
+    }
+  }, [currentView, userRole, session, authLoading, profileLoading]);
 
   // Shared application "database" states
   const {
@@ -540,6 +559,7 @@ export default function App() {
         onViewChange={setCurrentView}
         onCreateNewRepair={handleCreateNewRepair}
         onLogout={handleLogout}
+        userRole={userRole}
       />
 
       {/* Main interactive workspace panels wrapper */}

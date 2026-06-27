@@ -4,30 +4,40 @@
  */
 
 import React from 'react';
-import { ActiveView } from '../types';
+import { ActiveView, UserRole } from '../types';
 
 interface SidebarProps {
   activeView: ActiveView;
   onViewChange: (view: ActiveView) => void;
   onCreateNewRepair: () => void;
   onLogout: () => void;
+  userRole: UserRole;
 }
+
+const VIEWS_BY_ROLE: Record<UserRole, ActiveView[]> = {
+  admin: ['dashboard', 'pos', 'repairs', 'reports', 'settings', 'arqueo'],
+  technician: ['dashboard', 'repairs', 'reports'],
+};
+
+const NAV_ITEMS: { view: ActiveView; label: string; icon: string }[] = [
+  { view: 'dashboard', label: 'Panel', icon: 'dashboard' },
+  { view: 'pos', label: 'POS', icon: 'point_of_sale' },
+  { view: 'repairs', label: 'Reparaciones', icon: 'build' },
+  { view: 'arqueo', label: 'Arqueo', icon: 'account_balance' },
+  { view: 'reports', label: 'Reportes', icon: 'analytics' },
+];
 
 export default function Sidebar({
   activeView,
   onViewChange,
   onCreateNewRepair,
-  onLogout
+  onLogout,
+  userRole
 }: SidebarProps) {
   if (activeView === 'login') return null;
 
-  const navItems = [
-    { view: 'dashboard' as ActiveView, label: 'Panel', icon: 'dashboard' },
-    { view: 'pos' as ActiveView, label: 'POS', icon: 'point_of_sale' },
-    { view: 'repairs' as ActiveView, label: 'Reparaciones', icon: 'build' },
-    { view: 'arqueo' as ActiveView, label: 'Arqueo', icon: 'account_balance' },
-    { view: 'reports' as ActiveView, label: 'Reportes', icon: 'analytics' },
-  ];
+  const allowedViews = VIEWS_BY_ROLE[userRole];
+  const navItems = NAV_ITEMS.filter(item => allowedViews.includes(item.view));
 
   return (
     <aside className="bg-white h-full w-64 fixed left-0 top-0 border-r border-outline-variant flex flex-col py-6 px-4 z-50 select-none">
@@ -76,18 +86,19 @@ export default function Sidebar({
 
       {/* Footer Navigation */}
       <div className="mt-auto space-y-1 pt-4 border-t border-outline-variant">
-        <button
-          onClick={() => onViewChange('settings')}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-200 text-left cursor-pointer outline-none ${
-            activeView === 'settings'
-              ? 'text-primary font-bold border-r-4 border-primary bg-surface-container-low scale-[0.98]'
-              : 'text-on-surface-variant hover:text-primary hover:bg-surface-container-low hover:scale-[0.98]'
-          }`}
-        >
-          <span className="material-symbols-outlined">settings</span>
-          <span className="text-sm font-sans font-medium">Configuración</span>
-        </button>
-        
+        {allowedViews.includes('settings') && (
+          <button
+            onClick={() => onViewChange('settings')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-200 text-left cursor-pointer outline-none ${
+              activeView === 'settings'
+                ? 'text-primary font-bold border-r-4 border-primary bg-surface-container-low scale-[0.98]'
+                : 'text-on-surface-variant hover:text-primary hover:bg-surface-container-low hover:scale-[0.98]'
+            }`}
+          >
+            <span className="material-symbols-outlined">settings</span>
+            <span className="text-sm font-sans font-medium">Configuración</span>
+          </button>
+        )}
         <button
           onClick={onLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-error hover:bg-error-container hover:text-on-error-container transition-all duration-200 text-left cursor-pointer outline-none hover:scale-[0.98]"
