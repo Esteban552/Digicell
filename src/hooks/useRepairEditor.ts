@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { RepairOrder, ActiveView } from '../types';
 import { supabase } from '../lib/supabase';
+import { validateRepair } from '../lib/repairValidation';
 import { useRepairOrders } from './useRepairOrders';
 import type { ToastMessage } from './useToast';
 
@@ -81,22 +82,7 @@ export function useRepairEditor(
       orderRef = { ...orderRef, warrantyEnd: thirtyDaysFromNow };
     }
 
-    const errors: string[] = [];
-    if (!orderRef.clientName?.trim()) errors.push('El nombre del cliente es obligatorio.');
-    if (orderRef.clientPhone && !/^\d{10}$/.test(orderRef.clientPhone.replace(/\D/g, ''))) errors.push('El teléfono debe tener 10 dígitos.');
-    if (orderRef.clientEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(orderRef.clientEmail)) errors.push('El correo electrónico no es válido.');
-    if (orderRef.totalCost < 0) errors.push('El costo total no puede ser negativo.');
-    if (orderRef.advancePaid < 0) errors.push('El anticipo no puede ser negativo.');
-    if (orderRef.advancePaid > orderRef.totalCost) errors.push('El anticipo no puede superar el costo total.');
-    if (orderRef.abonosPaid < 0) errors.push('Los abonos no pueden ser negativos.');
-    if ((orderRef.abonosPaid || 0) + orderRef.advancePaid > orderRef.totalCost) errors.push('La suma de anticipo + abonos no puede superar el costo total.');
-    if (orderRef.totalCost > 0 && !orderRef.deviceModel?.trim()) errors.push('Si hay costo, indicá el modelo del equipo.');
-    if (!orderRef.deliveryDate?.trim()) errors.push('La fecha de entrega es obligatoria.');
-    const todayStr = new Date().toISOString().split('T')[0];
-    if (orderRef.deliveryDate?.trim() && orderRef.deliveryDate < todayStr) errors.push('La fecha de entrega no puede ser pasada.');
-    if (!orderRef.warrantyEnd?.trim()) errors.push('La fecha de fin de garantía es obligatoria.');
-    if (orderRef.warrantyEnd?.trim() && orderRef.warrantyEnd < todayStr) errors.push('La fecha de garantía no puede ser pasada.');
-    if (!orderRef.problemReported?.trim()) errors.push('El detalle del problema es obligatorio.');
+    const errors = validateRepair(orderRef);
 
     if (errors.length > 0) {
       showToast('Corregí los errores', errors.join(' '), 'error');
