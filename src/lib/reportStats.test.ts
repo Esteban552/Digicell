@@ -19,6 +19,15 @@ describe('calcReportStats', () => {
     expect(r.totalAdvances).toBe(100);
   });
 
+  it('includes Repair Payment in totalAdvances', () => {
+    const logs: LogEntry[] = [
+      { id: '1', time: '', type: 'Repair Advance', description: '', amount: 200, status: 'Advance' },
+      { id: '2', time: '', type: 'Repair Payment', description: '', amount: 150, status: 'Paid' },
+    ];
+    const r = calcReportStats(logs);
+    expect(r.totalAdvances).toBe(350);
+  });
+
   it('calculates totalCashInRegister as 1000 + all collections', () => {
     const logs: LogEntry[] = [
       { id: '1', time: '', type: 'POS Sale', description: '', amount: 300, status: 'Paid' },

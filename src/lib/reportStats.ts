@@ -18,7 +18,7 @@ export function calcReportStats(logs: LogEntry[]): ReportStats {
     .reduce((acc, curr) => acc + curr.amount, 0);
 
   const totalAdvances = logs
-    .filter(l => l.type === 'Repair Advance')
+    .filter(l => l.type === 'Repair Advance' || l.type === 'Repair Payment')
     .reduce((acc, curr) => acc + curr.amount, 0);
 
   const startingFundBase = 1000.00;

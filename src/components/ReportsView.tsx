@@ -61,6 +61,11 @@ export default function ReportsView({
     [logs, selectedDate]
   );
 
+  const dateFilteredRepairs = useMemo(() =>
+    repairs.filter(r => r.createdAt.startsWith(selectedDate)),
+    [repairs, selectedDate]
+  );
+
   const filteredLogs = useMemo(() => {
     let result = dateFilteredLogs;
     if (activeFilter === 'sales') result = result.filter(l => l.type === 'POS Sale');
@@ -96,9 +101,9 @@ export default function ReportsView({
 
   const repairCounts = useMemo(() => {
     const counts: Record<string, number> = { in_review: 0, waiting_parts: 0, repaired: 0, delivered: 0 };
-    repairs.forEach(r => { if (counts[r.status] !== undefined) counts[r.status]++; });
+    dateFilteredRepairs.forEach(r => { if (counts[r.status] !== undefined) counts[r.status]++; });
     return counts;
-  }, [repairs]);
+  }, [dateFilteredRepairs]);
 
   return (
     <div className="flex-1 flex flex-col gap-6 font-sans select-none">
@@ -234,7 +239,9 @@ export default function ReportsView({
       </section>
 
       {/* Repair status summary row */}
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <section>
+        <h3 className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-3">Órdenes de reparación del {selectedDate}</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {repairStatusConfig.map(({ key, label, icon, color, bg }) => (
           <div key={key} className={`${bg} border border-outline-variant rounded-lg p-4 flex items-center gap-3 hover:shadow-sm transition-all`}>
             <span className={`material-symbols-outlined ${color} text-[28px]`}>{icon}</span>
@@ -244,6 +251,7 @@ export default function ReportsView({
             </div>
           </div>
         ))}
+        </div>
       </section>
 
       {/* Detailed table Activity logs list layout card */}
