@@ -594,7 +594,6 @@ export default function App() {
               <RepairsView
                 repairs={repairs}
                 selectedId={selectedRepairId}
-                onSetSelectedId={setSelectedRepairId}
                 onUpdateRepair={handleUpdateRepair}
                 onSaveRepairOrder={handleSaveRepairOrder}
                 showToast={showToast}
