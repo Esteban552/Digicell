@@ -3,10 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
-// Modular View Imports
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import LoginView from './components/LoginView';
@@ -18,7 +17,6 @@ import SettingsView from './components/SettingsView';
 import ArqueoCaja from './components/ArqueoCaja';
 import Toast from './components/Toast';
 
-// Data & Types Imports
 import { INITIAL_CART } from './data';
 import { supabase } from './lib/supabase';
 import { useRepairOrders } from './hooks/useRepairOrders';
@@ -26,33 +24,16 @@ import { useCashMovements } from './hooks/useCashMovements';
 import { useActivityLogs } from './hooks/useActivityLogs';
 import { useSettings } from './hooks/useSettings';
 import { useProducts } from './hooks/useProducts';
-import { ActiveView, RepairOrder, CartItem, UserRole } from './types';
 import { useProfile } from './hooks/useProfile';
-
-const DRAFT_ID = 'draft';
+import { useToast } from './hooks/useToast';
+import { useRepairEditor } from './hooks/useRepairEditor';
+import { useAppStats } from './hooks/useAppStats';
+import { ActiveView, CartItem, UserRole } from './types';
 
 const VIEWS_BY_ROLE: Record<UserRole, ActiveView[]> = {
   admin: ['dashboard', 'pos', 'repairs', 'reports', 'settings', 'arqueo'],
   technician: ['dashboard', 'repairs', 'reports'],
 };
-
-function blankRepair(): RepairOrder {
-  const today = new Date().toISOString().split('T')[0];
-  return {
-    id: DRAFT_ID,
-    clientName: '', clientPhone: '', clientEmail: '',
-    deviceBrand: 'Apple', deviceModel: '', deviceSerial: '',
-    devicePassword: '', deviceColor: '', powersOn: 'Yes',
-    batteryPercent: '', chargerLeft: false, coverLeft: false,
-    receivingCondition: '', problemReported: '', internalNotes: '',
-    status: 'in_review',
-    technician: 'Unassigned', deliveryDate: today,
-    warrantyEnd: new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0],
-    totalCost: 0, advancePaid: 0, abonosPaid: 0, remainingBalance: 0,
-    footnote: 'Garantía de 30 días en piezas reemplazadas. No nos hacemos responsables por equipos olvidados después de 60 días.',
-    createdAt: new Date().toISOString(),
-  };
-}
 
 export default function App() {
   // Supabase Auth session
@@ -98,20 +79,16 @@ export default function App() {
   const userName = session?.user?.user_metadata?.display_name ?? session?.user?.email?.split('@')[0] ?? 'Invitado';
   const userId = session?.user?.id ?? null;
 
-  // Load user profile from DB to get role
   const { profile, loading: profileLoading } = useProfile(userId);
   const userRole: UserRole = profile?.role ?? 'technician';
 
-  // Active navigation view state
   const [currentView, setCurrentView] = useState<ActiveView>('dashboard');
 
-  // Navigate based on auth state
   useEffect(() => {
     if (authLoading || profileLoading) return;
     setCurrentView(session ? 'dashboard' : 'login');
   }, [session, authLoading, profileLoading]);
 
-  // Redirect if current view is not allowed for the user's role
   useEffect(() => {
     if (authLoading || profileLoading || !session) return;
     const allowed = VIEWS_BY_ROLE[userRole];
@@ -120,317 +97,49 @@ export default function App() {
     }
   }, [currentView, userRole, session, authLoading, profileLoading]);
 
-  // Shared application "database" states
-  const {
-    data: dbRepairs,
-    loading: repairsLoading,
-    error: repairsError,
-    update: syncRepairToDb,
-    remove: removeRepairFromDb,
-    refetch: refetchRepairs,
-  } = useRepairOrders();
+  // Toast notifications
+  const { toastMessage, showToast, setToastMessage } = useToast();
 
-  // Local mirror for instant form editing — syncs from DB on load
-  const [repairs, setRepairs] = useState<RepairOrder[]>([]);
-  useEffect(() => {
-    if (!repairsLoading) setRepairs(dbRepairs);
-  }, [dbRepairs, repairsLoading]);
-
+  // Data hooks
   const { data: logs, error: logsError, refetch: refetchLogs } = useActivityLogs();
   const { data: cashMovements, error: cashError, add: addCashMovement } = useCashMovements();
   const { data: settings, error: settingsError, update: updateSetting } = useSettings();
   const { data: products, error: productsError, refetch: refetchProducts } = useProducts();
+  const { error: repairsError } = useRepairOrders();
   const [cart, setCart] = useState<CartItem[]>(INITIAL_CART);
 
-  // Draft repair for new notes (not yet saved to DB)
-  const [draftRepair, setDraftRepair] = useState<RepairOrder>(blankRepair);
+  // Surface hook errors to user via toast
+  useEffect(() => { if (repairsError) showToast('Error en reparaciones', repairsError, 'error'); }, [repairsError, showToast]);
+  useEffect(() => { if (logsError) showToast('Error en actividad', logsError, 'error'); }, [logsError, showToast]);
+  useEffect(() => { if (cashError) showToast('Error en caja', cashError, 'error'); }, [cashError, showToast]);
+  useEffect(() => { if (settingsError) showToast('Error en configuración', settingsError, 'error'); }, [settingsError, showToast]);
+  useEffect(() => { if (productsError) showToast('Error en inventario', productsError, 'error'); }, [productsError, showToast]);
 
-  // Active loaded repair inside Order Intake Form
-  const [selectedRepairId, setSelectedRepairId] = useState<string>('');
-  // Set initial selected repair from DB data once loaded
-  useEffect(() => {
-    if (repairs.length > 0 && !selectedRepairId) {
-      setSelectedRepairId(repairs[0].id);
-    }
-  }, [repairs, selectedRepairId]);
+  // Repair editor — manages all repair state and CRUD
+  const repairEditor = useRepairEditor(showToast, refetchLogs, setCurrentView);
 
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [serviciosModalOpen, setServiciosModalOpen] = useState(false);
 
-  // Global Toast notification state
-  const [toastMessage, setToastMessage] = useState<{
-    title: string;
-    desc: string;
-    type: 'success' | 'info' | 'error';
-  } | null>(null);
-
-  // Helper trigger to flash notification
-  const showToast = useCallback((title: string, desc: string, type: 'success' | 'info' | 'error' = 'info') => {
-    setToastMessage({ title, desc, type });
-  }, []);
-
-  // Surface hook errors to user via toast
-  useEffect(() => {
-    if (repairsError) showToast('Error en reparaciones', repairsError, 'error');
-  }, [repairsError, showToast]);
-  useEffect(() => {
-    if (logsError) showToast('Error en actividad', logsError, 'error');
-  }, [logsError, showToast]);
-  useEffect(() => {
-    if (cashError) showToast('Error en caja', cashError, 'error');
-  }, [cashError, showToast]);
-  useEffect(() => {
-    if (settingsError) showToast('Error en configuración', settingsError, 'error');
-  }, [settingsError, showToast]);
-  useEffect(() => {
-    if (productsError) showToast('Error en inventario', productsError, 'error');
-  }, [productsError, showToast]);
-
-  // Global Keyboard listener shortcuts (F5 for Checkout, F8 for Search)
+  // Global Keyboard listener shortcuts
   useEffect(() => {
     const handleGlobalShortcuts = (e: KeyboardEvent) => {
       if (!session) return;
-      
       if (e.key === 'F8') {
         e.preventDefault();
         setSearchModalOpen(prev => !prev);
         showToast('Búsqueda Rápida', 'Toggle de pantalla de órdenes activa (F8).', 'info');
       }
     };
-
     window.addEventListener('keydown', handleGlobalShortcuts);
     return () => window.removeEventListener('keydown', handleGlobalShortcuts);
   }, [session, showToast]);
 
-  // Log out user
   const handleLogout = async () => {
     if (confirm('¿Seguro que deseas salir y cerrar sesión?')) {
       await supabase.auth.signOut();
       setCart([]);
       showToast('Sesión Cerrada', 'Has desconectado de la terminal actual con éxito.', 'info');
-    }
-  };
-
-  // Create a brand new vacant repair order (local draft, no DB insert yet)
-  const handleCreateNewRepair = () => {
-    setDraftRepair(blankRepair());
-    setSelectedRepairId(DRAFT_ID);
-    setCurrentView('repairs');
-    showToast('Nueva Nota', 'Completá los datos y guardá para asignar el folio.', 'info');
-  };
-
-  // Handle updates inside repair forms (local-only for instant response)
-  const handleUpdateRepair = (id: string, updatedFields: Partial<RepairOrder>) => {
-    if (id === DRAFT_ID) {
-      setDraftRepair(prev => ({ ...prev, ...updatedFields }));
-    } else {
-      setRepairs(prev => prev.map(r => r.id === id ? { ...r, ...updatedFields } : r));
-    }
-  };
-
-  // Finalize/Save the repair order, syncing to Supabase
-  const handleSaveRepairOrder = async (id: string) => {
-    // Resolve the repair data (draft or existing)
-    let orderRef = id === DRAFT_ID ? draftRepair : repairs.find(r => r.id === id);
-    if (!orderRef) return;
-
-    // When saving with 'delivered' status, auto-assign warranty to 30 days
-    if (orderRef.status === 'delivered') {
-      const thirtyDaysFromNow = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
-      if (id === DRAFT_ID) {
-        setDraftRepair(prev => ({ ...prev, warrantyEnd: thirtyDaysFromNow }));
-      } else {
-        setRepairs(prev => prev.map(r => r.id === id ? { ...r, warrantyEnd: thirtyDaysFromNow } : r));
-      }
-      orderRef = { ...orderRef, warrantyEnd: thirtyDaysFromNow };
-    }
-
-    // Validations
-    const errors: string[] = [];
-    if (!orderRef.clientName?.trim()) errors.push('El nombre del cliente es obligatorio.');
-    if (orderRef.clientPhone && !/^\d{10}$/.test(orderRef.clientPhone.replace(/\D/g, ''))) errors.push('El teléfono debe tener 10 dígitos.');
-    if (orderRef.clientEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(orderRef.clientEmail)) errors.push('El correo electrónico no es válido.');
-    if (orderRef.totalCost < 0) errors.push('El costo total no puede ser negativo.');
-    if (orderRef.advancePaid < 0) errors.push('El anticipo no puede ser negativo.');
-    if (orderRef.advancePaid > orderRef.totalCost) errors.push('El anticipo no puede superar el costo total.');
-    if (orderRef.abonosPaid < 0) errors.push('Los abonos no pueden ser negativos.');
-    if ((orderRef.abonosPaid || 0) + orderRef.advancePaid > orderRef.totalCost) errors.push('La suma de anticipo + abonos no puede superar el costo total.');
-    if (orderRef.totalCost > 0 && !orderRef.deviceModel?.trim()) errors.push('Si hay costo, indicá el modelo del equipo.');
-    if (!orderRef.deliveryDate?.trim()) errors.push('La fecha de entrega es obligatoria.');
-    const todayStr = new Date().toISOString().split('T')[0];
-    if (orderRef.deliveryDate?.trim() && orderRef.deliveryDate < todayStr) errors.push('La fecha de entrega no puede ser pasada.');
-    if (!orderRef.warrantyEnd?.trim()) errors.push('La fecha de fin de garantía es obligatoria.');
-    if (orderRef.warrantyEnd?.trim() && orderRef.warrantyEnd < todayStr) errors.push('La fecha de garantía no puede ser pasada.');
-    if (!orderRef.problemReported?.trim()) errors.push('El detalle del problema es obligatorio.');
-
-    if (errors.length > 0) {
-      showToast('Corregí los errores', errors.join(' '), 'error');
-      return;
-    }
-
-    if (id === DRAFT_ID) {
-      // Insert new repair into DB
-      const { data: { user } } = await supabase.auth.getUser();
-      const payload: Record<string, unknown> = {
-        client_name: draftRepair.clientName,
-        client_phone: draftRepair.clientPhone,
-        client_email: draftRepair.clientEmail,
-        device_brand: draftRepair.deviceBrand,
-        device_model: draftRepair.deviceModel,
-        device_serial: draftRepair.deviceSerial,
-        device_password: draftRepair.devicePassword,
-        device_color: draftRepair.deviceColor,
-        powers_on: draftRepair.powersOn,
-        battery_percent: draftRepair.batteryPercent,
-        charger_left: draftRepair.chargerLeft,
-        cover_left: draftRepair.coverLeft,
-        receiving_condition: draftRepair.receivingCondition,
-        problem_reported: draftRepair.problemReported,
-        internal_notes: draftRepair.internalNotes,
-        status: draftRepair.status,
-        technician: draftRepair.technician,
-        delivery_date: draftRepair.deliveryDate,
-        warranty_end: orderRef.warrantyEnd,
-        total_cost: draftRepair.totalCost,
-        advance_paid: draftRepair.advancePaid,
-        abonos_paid: draftRepair.abonosPaid,
-        footnote: draftRepair.footnote,
-        created_by: user?.id ?? null,
-      };
-      const { data: row, error: err } = await supabase
-        .from('repair_orders')
-        .insert(payload)
-        .select()
-        .single();
-
-      if (err || !row) {
-        showToast('Error', 'No se pudo guardar la orden.', 'error');
-        return;
-      }
-
-      const newRepair: RepairOrder = {
-        id: String(row.id),
-        clientName: draftRepair.clientName,
-        clientPhone: draftRepair.clientPhone,
-        clientEmail: draftRepair.clientEmail,
-        deviceBrand: draftRepair.deviceBrand,
-        deviceModel: draftRepair.deviceModel,
-        deviceSerial: draftRepair.deviceSerial,
-        devicePassword: draftRepair.devicePassword,
-        deviceColor: draftRepair.deviceColor,
-        powersOn: draftRepair.powersOn,
-        batteryPercent: draftRepair.batteryPercent,
-        chargerLeft: draftRepair.chargerLeft,
-        coverLeft: draftRepair.coverLeft,
-        receivingCondition: draftRepair.receivingCondition,
-        problemReported: draftRepair.problemReported,
-        internalNotes: draftRepair.internalNotes,
-        status: draftRepair.status,
-        technician: draftRepair.technician,
-        deliveryDate: draftRepair.deliveryDate,
-        warrantyEnd: draftRepair.warrantyEnd,
-        totalCost: draftRepair.totalCost,
-        advancePaid: draftRepair.advancePaid,
-        abonosPaid: draftRepair.abonosPaid,
-        remainingBalance: Math.max(0, draftRepair.totalCost - draftRepair.advancePaid - draftRepair.abonosPaid),
-        footnote: draftRepair.footnote,
-        createdAt: row.created_at,
-      };
-
-      setRepairs(prev => [newRepair, ...prev]);
-      setSelectedRepairId(newRepair.id);
-      refetchLogs();
-      showToast('Nota Guardada', `Folio #${newRepair.id} asignado correctamente.`, 'success');
-    } else {
-      // Update existing repair
-      await syncRepairToDb(id, orderRef);
-      refetchLogs();
-      showToast('Nota Actualizada', `Orden #${orderRef.id} guardada correctamente.`, 'success');
-    }
-  };
-
-  // Perform delete on selected repair
-  const handleDeleteCurrentRepair = async () => {
-    if (selectedRepairId === DRAFT_ID) {
-      setDraftRepair(blankRepair());
-      setSelectedRepairId(repairs.length > 0 ? repairs[0].id : '');
-      showToast('Borrador descartado', 'La nota nueva se ha descartado.', 'info');
-      return;
-    }
-    if (confirm(`¿Seguro que deseas eliminar permanentemente el folio #${selectedRepairId}?`)) {
-      await removeRepairFromDb(selectedRepairId);
-      setRepairs(prev => prev.filter(r => r.id !== selectedRepairId));
-      refetchLogs();
-      showToast('Registro eliminado', `Se descartó el folio #${selectedRepairId} del registro.`, 'error');
-      
-      // Load next available or make a new one
-      const remaining = repairs.filter(r => r.id !== selectedRepairId);
-      if (remaining.length > 0) {
-        setSelectedRepairId(remaining[0].id);
-      } else {
-        handleCreateNewRepair();
-      }
-    }
-  };
-
-  // Reprint triggered from Repairs top bar
-  const handleReprintCurrentRepair = () => {
-    showToast('Reimprimir Comprobante', `Generando ticket de carga térmica para folio #${selectedRepairId}...`, 'info');
-  };
-
-  // Jump to a repair by its folio number
-  const handleJumpToRepair = useCallback((folioNumber: number) => {
-    let target: RepairOrder | undefined;
-    for (const r of repairs) {
-      if (Number(r.id) === folioNumber || r.id === String(folioNumber)) {
-        target = r;
-        break;
-      }
-    }
-    if (target) {
-      setSelectedRepairId(target.id);
-      setCurrentView('repairs');
-      showToast('Orden encontrada', `Folio #${folioNumber} cargado.`, 'success');
-    } else {
-      showToast('No encontrada', `No existe orden con folio #${folioNumber}.`, 'error');
-    }
-  }, [repairs, showToast]);
-
-  // Bulk-delete completed (delivered) repair orders
-  const handleDeleteCompletedRepairs = useCallback(async (count: number) => {
-    const { data: toDelete, error: fetchErr } = await supabase
-      .from('repair_orders')
-      .select('id')
-      .eq('status', 'delivered')
-      .order('created_at', { ascending: false })
-      .limit(count);
-
-    if (fetchErr || !toDelete || toDelete.length === 0) {
-      showToast('Error', 'No se pudieron obtener las órdenes a eliminar.', 'error');
-      return;
-    }
-
-    const ids = toDelete.map(r => r.id);
-    const { error: delErr } = await supabase
-      .from('repair_orders')
-      .delete()
-      .in('id', ids);
-
-    if (delErr) {
-      showToast('Error', 'No se pudieron eliminar las órdenes.', 'error');
-      return;
-    }
-
-    await refetchRepairs();
-    showToast('Órdenes eliminadas', `Se eliminaron ${ids.length} órdenes entregadas.`, 'success');
-  }, [showToast, refetchRepairs]);
-
-  // Clear loaded fields in Repairs
-  const handleClearRepairForm = () => {
-    if (selectedRepairId === DRAFT_ID) {
-      setDraftRepair(blankRepair());
-    } else {
-      handleCreateNewRepair();
     }
   };
 
@@ -476,7 +185,6 @@ export default function App() {
     if (itemsErr) {
       showToast('Error', 'Venta registrada pero fallaron los detalles.', 'error');
     } else {
-      // Deduct stock for cart items that have a productId
       const stockDeductions = cart
         .filter(c => c.productId)
         .map(c => {
@@ -505,87 +213,45 @@ export default function App() {
     showToast('Flujo registrado', `Movimiento de caja por $${amount.toFixed(2)} asentado en reporte.`, 'success');
   };
 
-  // Live total financial summaries for Reports View
-  const calculatedStats = useMemo(() => {
-    // 1) Total POS sales: summing item costs inside POS Sale logs
-    const salesOnly = logs
-      .filter(l => l.type === 'POS Sale')
-      .reduce((acc, curr) => acc + curr.amount, 0);
+  // Live total financial summaries
+  const { calculatedStats, dashboardBentoStats } = useAppStats(logs, repairEditor.repairs);
 
-    // 2) Repair Advances: summing Repair Advance logs
-    const advancesOnly = logs
-      .filter(l => l.type === 'Repair Advance')
-      .reduce((acc, curr) => acc + curr.amount, 0);
-
-    // 3) Total Cash in Registry
-    // Start register base state fund + all positive register collections (sales, advances) - outflows
-    const startingFundBase = 1000.00;
-    const collections = logs.reduce((acc, curr) => acc + curr.amount, 0);
-    const finalRegisterFund = startingFundBase + collections;
-
-    return {
-      totalSales: salesOnly,
-      totalAdvances: advancesOnly,
-      totalCashInRegister: finalRegisterFund
-    };
-  }, [logs]);
-
-  const dashboardBentoStats = useMemo(() => {
-    const waitingParts = repairs.filter(r => r.status === 'waiting_parts').length;
-    const inReview = repairs.filter(r => r.status === 'in_review').length;
-    const repaired = repairs.filter(r => r.status === 'repaired').length;
-    
-    return {
-      urgent: waitingParts + inReview,
-      inProgress: repaired,
-      completed: repairs.filter(r => r.status === 'delivered').length
-    };
-  }, [repairs]);
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-surface-bright">
-        <span className="animate-spin material-symbols-outlined text-primary text-4xl">progress_activity</span>
-      </div>
-    );
-  }
+  if (authLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-surface-bright">
+      <span className="animate-spin material-symbols-outlined text-primary text-4xl">progress_activity</span>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-surface-bright flex antialiased select-none font-sans">
-      
-      {/* Sidebar navigation */}
+
       <Sidebar
         activeView={currentView}
         onViewChange={setCurrentView}
-        onCreateNewRepair={handleCreateNewRepair}
+        onCreateNewRepair={repairEditor.handleCreateNewRepair}
         onLogout={handleLogout}
         userRole={userRole}
       />
 
-      {/* Main interactive workspace panels wrapper */}
       <div className={`flex-1 flex flex-col ${session ? 'ml-64' : 'ml-0'}`}>
-        
-        {/* Top bar header */}
+
         <Header
           activeView={currentView}
           user={userName}
           onOpenSearchModal={() => setSearchModalOpen(true)}
-          onCreateNewRepair={handleCreateNewRepair}
-          onDeleteCurrentRepair={handleDeleteCurrentRepair}
-          onReprintCurrentRepair={handleReprintCurrentRepair}
-          onClearRepairForm={handleClearRepairForm}
+          onCreateNewRepair={repairEditor.handleCreateNewRepair}
+          onDeleteCurrentRepair={repairEditor.handleDeleteCurrentRepair}
+          onReprintCurrentRepair={repairEditor.handleReprintCurrentRepair}
+          onClearRepairForm={repairEditor.handleClearRepairForm}
           onOpenServiciosModal={() => setServiciosModalOpen(true)}
-          onJumpToRepair={handleJumpToRepair}
-          currentRepairId={selectedRepairId}
+          onJumpToRepair={repairEditor.handleJumpToRepair}
+          currentRepairId={repairEditor.selectedRepairId}
         />
 
-        {/* Dynamic page routes rendering canvas */}
         <main className={`flex-1 p-6 ${session ? 'mt-16' : 'mt-0'} overflow-y-auto bg-surface-container-lowest h-[calc(100vh-4rem)]`}>
           <div className="max-w-7xl mx-auto h-full flex flex-col">
-            
-            {currentView === 'login' && (
-              <LoginView />
-            )}
+
+            {currentView === 'login' && <LoginView />}
 
             {currentView === 'dashboard' && (
               <DashboardView
@@ -612,20 +278,20 @@ export default function App() {
 
             {currentView === 'repairs' && (
               <RepairsView
-                repairs={repairs}
-                selectedId={selectedRepairId}
-                onUpdateRepair={handleUpdateRepair}
-                onSaveRepairOrder={handleSaveRepairOrder}
+                repairs={repairEditor.repairs}
+                selectedId={repairEditor.selectedRepairId}
+                onUpdateRepair={repairEditor.handleUpdateRepair}
+                onSaveRepairOrder={repairEditor.handleSaveRepairOrder}
                 showToast={showToast}
                 searchModalOpen={searchModalOpen}
                 onSetSearchModalOpen={setSearchModalOpen}
                 serviciosModalOpen={serviciosModalOpen}
                 onSetServiciosModalOpen={setServiciosModalOpen}
-                onDeleteCompletedRepairs={handleDeleteCompletedRepairs}
-                draftRepair={draftRepair}
-                draftId={DRAFT_ID}
+                onDeleteCompletedRepairs={repairEditor.handleDeleteCompletedRepairs}
+                draftRepair={repairEditor.draftRepair}
+                draftId={repairEditor.DRAFT_ID}
                 onSelectRepair={(id: string) => {
-                  setSelectedRepairId(id);
+                  repairEditor.setSelectedRepairId(id);
                   setCurrentView('repairs');
                   setServiciosModalOpen(false);
                 }}
@@ -635,7 +301,7 @@ export default function App() {
             {currentView === 'reports' && (
               <ReportsView
                 logs={logs}
-                repairs={repairs}
+                repairs={repairEditor.repairs}
                 totalSalesSum={calculatedStats.totalSales}
                 totalAdvancesSum={calculatedStats.totalAdvances}
                 showToast={showToast}
@@ -643,9 +309,7 @@ export default function App() {
             )}
 
             {currentView === 'arqueo' && (
-              <ArqueoCaja
-                movements={cashMovements}
-              />
+              <ArqueoCaja movements={cashMovements} />
             )}
 
             {currentView === 'settings' && (
@@ -657,11 +321,7 @@ export default function App() {
 
       </div>
 
-      {/* Persistent global toast notifications widget */}
-      <Toast 
-        message={toastMessage} 
-        onClose={() => setToastMessage(null)} 
-      />
+      <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
 
     </div>
   );
