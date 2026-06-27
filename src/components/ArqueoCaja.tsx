@@ -5,10 +5,9 @@ import { DENOMS, emptyCounts, calcTotal, type DenomCounts } from '../lib/denomin
 
 interface ArqueoCajaProps {
   movements: CashRegistryMovement[];
-  showToast: (title: string, desc: string, type: 'success' | 'info' | 'error') => void;
 }
 
-export default function ArqueoCaja({ movements, showToast }: ArqueoCajaProps) {
+export default function ArqueoCaja({ movements }: ArqueoCajaProps) {
   const STARTING_FUND = 1000;
   const [physicalCounts, setPhysicalCounts] = useState<DenomCounts>(emptyCounts);
 

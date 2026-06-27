@@ -128,7 +128,7 @@ export default function RepairsView({
     window.open(whatsappUrl, "_blank", "noreferrer");
   };
 
-  const handleUpdateField = (key: keyof RepairOrder, value: any) => {
+  const handleUpdateField = (key: keyof RepairOrder, value: string | number | boolean) => {
     if (isDelivered) return;
     if (!isDraft && key !== 'status' && key !== 'internalNotes') return;
     onUpdateRepair(activeRepair.id, { [key]: value });
@@ -305,7 +305,7 @@ export default function RepairsView({
                   value={activeRepair.deviceModel}
                   readOnly={!isDraft}
                   onChange={(e) => {
-                    const v = e.target.value.replace(/[^a-zA-ZáéíóúüñÁÉÍÓÚÜÑ0-9\s\-\.\/]/g, '').slice(0, 30);
+                    const v = e.target.value.replace(/[^a-zA-ZáéíóúüñÁÉÍÓÚÜÑ0-9\s-./]/g, '').slice(0, 30);
                     handleUpdateField("deviceModel", v);
                     if (errors.deviceModel) clearError('deviceModel');
                   }}

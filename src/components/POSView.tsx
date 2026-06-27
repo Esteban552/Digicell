@@ -6,10 +6,6 @@ import DenominationPad from './DenominationPad';
 import { DENOMS, emptyCounts, calcTotal, calcChange } from '../lib/denominations';
 import type { DenomCounts } from '../lib/denominations';
 
-function onlyText(v: string) {
-  return v.replace(/[0-9]/g, '');
-}
-
 function getCartQtyForProduct(cart: CartItem[], productId: number) {
   return cart
     .filter(i => i.productId === productId)

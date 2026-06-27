@@ -70,8 +70,7 @@ export default function LoginView() {
           setPassword("");
         }
       }
-    } catch (err: any) {
-      // Captura errores catastróficos o de red inesperados
+    } catch (err: unknown) {
       setErrorMsg("Ocurrió un error inesperado al conectar con el servidor.");
       console.error("Error del sistema:", err);
     } finally {

@@ -16,12 +16,6 @@ interface ServiciosModalProps {
   onSelectRepair: (id: string) => void;
 }
 
-function formatDate(dateStr: string) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
-
 function formatDateTime(dateStr: string) {
   if (!dateStr) return '';
   const d = new Date(dateStr);

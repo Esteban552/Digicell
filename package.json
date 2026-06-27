@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "lint:eslint": "eslint .",
     "deploy": "npm run build && ssh -p 2222 esteban@2.25.170.208 \"rm -rf /var/www/digicell-pos/*\" && scp -P 2222 -r dist/. esteban@2.25.170.208:/var/www/digicell-pos/ && ssh -p 2222 esteban@2.25.170.208 \"chmod -R 755 /var/www/digicell-pos\""
   },
   "dependencies": {
@@ -25,13 +26,17 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
+    "eslint": "^10.6.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
+    "typescript-eslint": "^8.62.0",
     "vite": "^6.2.3"
   }
 }

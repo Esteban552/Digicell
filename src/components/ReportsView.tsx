@@ -11,7 +11,6 @@ interface ReportsViewProps {
   repairs: RepairOrder[];
   totalSalesSum: number;
   totalAdvancesSum: number;
-  totalCashSum: number;
   showToast: (title: string, desc: string, type: 'success' | 'info' | 'error') => void;
 }
 
@@ -42,7 +41,6 @@ export default function ReportsView({
   repairs,
   totalSalesSum,
   totalAdvancesSum,
-  totalCashSum,
   showToast
 }: ReportsViewProps) {
   const [filterQuery, setFilterQuery] = useState('');

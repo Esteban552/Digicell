@@ -105,7 +105,6 @@ export default function App() {
   const {
     data: dbRepairs,
     loading: repairsLoading,
-    create: createRepairInDb,
     update: syncRepairToDb,
     remove: removeRepairFromDb,
     refetch: refetchRepairs,
@@ -602,7 +601,6 @@ export default function App() {
                 repairs={repairs}
                 totalSalesSum={calculatedStats.totalSales}
                 totalAdvancesSum={calculatedStats.totalAdvances}
-                totalCashSum={calculatedStats.totalCashInRegister}
                 showToast={showToast}
               />
             )}
@@ -610,7 +608,6 @@ export default function App() {
             {currentView === 'arqueo' && (
               <ArqueoCaja
                 movements={cashMovements}
-                showToast={showToast}
               />
             )}
 
