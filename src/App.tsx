@@ -105,6 +105,7 @@ export default function App() {
   const {
     data: dbRepairs,
     loading: repairsLoading,
+    error: repairsError,
     update: syncRepairToDb,
     remove: removeRepairFromDb,
     refetch: refetchRepairs,
@@ -116,10 +117,10 @@ export default function App() {
     if (!repairsLoading) setRepairs(dbRepairs);
   }, [dbRepairs, repairsLoading]);
 
-  const { data: logs, refetch: refetchLogs } = useActivityLogs();
-  const { data: cashMovements, add: addCashMovement } = useCashMovements();
-  const { data: settings, update: updateSetting } = useSettings();
-  const { data: products, refetch: refetchProducts } = useProducts();
+  const { data: logs, error: logsError, refetch: refetchLogs } = useActivityLogs();
+  const { data: cashMovements, error: cashError, add: addCashMovement } = useCashMovements();
+  const { data: settings, error: settingsError, update: updateSetting } = useSettings();
+  const { data: products, error: productsError, refetch: refetchProducts } = useProducts();
   const [cart, setCart] = useState<CartItem[]>(INITIAL_CART);
 
   // Draft repair for new notes (not yet saved to DB)
@@ -148,6 +149,23 @@ export default function App() {
   const showToast = useCallback((title: string, desc: string, type: 'success' | 'info' | 'error' = 'info') => {
     setToastMessage({ title, desc, type });
   }, []);
+
+  // Surface hook errors to user via toast
+  useEffect(() => {
+    if (repairsError) showToast('Error en reparaciones', repairsError, 'error');
+  }, [repairsError, showToast]);
+  useEffect(() => {
+    if (logsError) showToast('Error en actividad', logsError, 'error');
+  }, [logsError, showToast]);
+  useEffect(() => {
+    if (cashError) showToast('Error en caja', cashError, 'error');
+  }, [cashError, showToast]);
+  useEffect(() => {
+    if (settingsError) showToast('Error en configuración', settingsError, 'error');
+  }, [settingsError, showToast]);
+  useEffect(() => {
+    if (productsError) showToast('Error en inventario', productsError, 'error');
+  }, [productsError, showToast]);
 
   // Global Keyboard listener shortcuts (F5 for Checkout, F8 for Search)
   useEffect(() => {
