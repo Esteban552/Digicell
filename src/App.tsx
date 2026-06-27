@@ -65,10 +65,10 @@ export default function App() {
 
     supabase.auth.getSession()
       .then(({ data: { session } }) => {
-        if (!settled) setSession(session);
+        setSession(session);
       })
       .catch(() => {
-        if (!settled) setSession(null);
+        setSession(null);
       })
       .finally(() => {
         if (!settled) {
