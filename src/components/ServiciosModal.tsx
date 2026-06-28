@@ -14,6 +14,7 @@ interface ServiciosModalProps {
   repairs: RepairOrder[];
   onDeleteCompletedRepairs: (count: number) => Promise<void>;
   onSelectRepair: (id: string) => void;
+  isSaving?: boolean;
 }
 
 function formatDateTime(dateStr: string) {
@@ -35,7 +36,7 @@ function todayStr() {
     String(d.getDate()).padStart(2, '0');
 }
 
-export default function ServiciosModal({ open, onClose, repairs, onDeleteCompletedRepairs, onSelectRepair }: ServiciosModalProps) {
+export default function ServiciosModal({ open, onClose, repairs, onDeleteCompletedRepairs, onSelectRepair, isSaving }: ServiciosModalProps) {
   const [search, setSearch] = useState('');
   const [filterDate, setFilterDate] = useState(todayStr());
 
@@ -71,7 +72,7 @@ export default function ServiciosModal({ open, onClose, repairs, onDeleteComplet
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>
       <div
-        className="bg-white rounded-xl border border-outline-variant shadow-xl w-[700px] max-h-[80vh] flex flex-col"
+        className="bg-white rounded-xl border border-outline-variant shadow-xl w-[1000px] max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -91,7 +92,7 @@ export default function ServiciosModal({ open, onClose, repairs, onDeleteComplet
         </div>
 
         {/* Filters */}
-        <div className="px-6 py-3 border-b border-outline-variant flex gap-3">
+        <div className="px-6 py-3 border-b border-outline-variant flex gap-3 items-center">
           {/* Date filter */}
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-[16px] text-on-surface-variant">calendar_today</span>
@@ -101,6 +102,12 @@ export default function ServiciosModal({ open, onClose, repairs, onDeleteComplet
               onChange={(e) => setFilterDate(e.target.value)}
               className="h-9 border border-outline rounded px-3 focus:border-tertiary outline-none text-xs font-sans"
             />
+            <button
+              onClick={() => setFilterDate('')}
+              className="h-9 px-3 text-xs font-bold font-sans bg-tertiary/10 text-tertiary rounded hover:bg-tertiary hover:text-white transition-all outline-none cursor-pointer whitespace-nowrap"
+            >
+              Mostrar Todas
+            </button>
           </div>
           {/* Search filter */}
           <div className="flex-1 relative">
@@ -207,12 +214,13 @@ export default function ServiciosModal({ open, onClose, repairs, onDeleteComplet
                   return (
                     <button
                       key={n}
+                      disabled={isSaving}
                       onClick={async () => {
                         if (confirm(`¿Eliminar las ${actual} órdenes entregadas más recientes? Esta acción no se puede deshacer.`)) {
                           await onDeleteCompletedRepairs(actual);
                         }
                       }}
-                      className="px-2.5 py-1 text-[10px] font-bold font-sans bg-error/10 text-error rounded hover:bg-error hover:text-white transition-all outline-none cursor-pointer"
+                      className="px-2.5 py-1 text-[10px] font-bold font-sans bg-error/10 text-error rounded hover:bg-error hover:text-white disabled:opacity-50 transition-all outline-none cursor-pointer disabled:cursor-not-allowed"
                     >
                       {n}
                     </button>

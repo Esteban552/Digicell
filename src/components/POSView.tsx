@@ -15,8 +15,8 @@ function getCartQtyForProduct(cart: CartItem[], productId: number) {
 interface POSViewProps {
   cart: CartItem[];
   onSetCart: (cart: CartItem[] | ((p: CartItem[]) => CartItem[])) => void;
-  onCompleteCheckout: (amountLocal: number, amountCard: number, amountUsd: number) => void;
-  onRegisterCashMovement: (type: 'in' | 'out', amount: number, note: string) => void;
+  onCompleteCheckout: (amountLocal: number, amountCard: number, amountUsd: number) => Promise<void>;
+  onRegisterCashMovement: (type: 'in' | 'out', amount: number, note: string) => Promise<void>;
   showToast: (title: string, desc: string, type: 'success' | 'info' | 'error') => void;
   products: Product[];
   onRefetchProducts: () => Promise<void>;
@@ -62,6 +62,7 @@ export default function POSView({
   const [cashMoveType, setCashMoveType] = useState<'in' | 'out'>('in');
   const [cashMoveAmount, setCashMoveAmount] = useState('');
   const [cashMoveNote, setCashMoveNote] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
   const [cashMoveCounts, setCashMoveCounts] = useState<DenomCounts>(emptyCounts);
 
   // Stock validation helper
@@ -214,7 +215,7 @@ export default function POSView({
     setPayModalOpen(false);
   };
 
-  const handleProcessPay = () => {
+  const handleProcessPay = async () => {
     const cash = Math.max(0, Number(cashLocal) || 0);
     const card = Math.max(0, Number(cardLocal) || 0);
     const usd = Math.max(0, Number(cashUsd) || 0);
@@ -224,8 +225,10 @@ export default function POSView({
       showToast('Pago insuficiente', `Faltan $${(total - sumPay).toFixed(2)} para cubrir el total.`, 'error');
       return;
     }
-    onCompleteCheckout(cash, card, usd);
+    setIsProcessing(true);
+    await onCompleteCheckout(cash, card, usd);
     closePayModal();
+    setIsProcessing(false);
   };
 
   const openCashModal = () => {
@@ -236,7 +239,7 @@ export default function POSView({
     setCashModalOpen(false);
   };
 
-  const handleCashMovement = () => {
+  const handleCashMovement = async () => {
     const amount = Math.max(0, Number(cashMoveAmount) || 0);
     if (amount <= 0) {
       showToast('Cantidad Inválida', 'El monto debe ser mayor a 0.', 'error');
@@ -251,11 +254,13 @@ export default function POSView({
       showToast('Falta Nota', 'Describí el motivo del movimiento.', 'error');
       return;
     }
-    onRegisterCashMovement(cashMoveType, amount, noteWithDenoms);
+    setIsProcessing(true);
+    await onRegisterCashMovement(cashMoveType, amount, noteWithDenoms);
     setCashMoveAmount('');
     setCashMoveNote('');
     setCashMoveCounts(emptyCounts());
     closeCashModal();
+    setIsProcessing(false);
   };
 
   return (
@@ -499,13 +504,15 @@ export default function POSView({
               <div className="flex gap-2 pt-1">
                 <button
                   onClick={openCashModal}
-                  className="flex-1 h-10 border border-outline-variant rounded-md text-xs font-semibold font-sans hover:bg-surface-container-low transition-all outline-none cursor-pointer"
+                  disabled={isProcessing}
+                  className="flex-1 h-10 border border-outline-variant rounded-md text-xs font-semibold font-sans hover:bg-surface-container-low disabled:opacity-50 transition-all outline-none cursor-pointer disabled:cursor-not-allowed"
                 >
                   Movimiento de Caja
                 </button>
                 <button
                   onClick={openPayModal}
-                  className="flex-1 h-10 bg-primary hover:bg-primary-container text-white rounded-md text-xs font-bold font-sans shadow-sm shadow-primary/20 outline-none cursor-pointer"
+                  disabled={isProcessing}
+                  className="flex-1 h-10 bg-primary hover:bg-primary-container disabled:opacity-50 text-white rounded-md text-xs font-bold font-sans shadow-sm shadow-primary/20 outline-none cursor-pointer disabled:cursor-not-allowed"
                 >
                   Cobrar
                 </button>
@@ -598,11 +605,13 @@ export default function POSView({
             })()}
 
             <div className="flex gap-3 mt-6">
-              <button onClick={closePayModal} className="flex-1 h-12 border border-outline-variant rounded-md text-sm font-semibold font-sans outline-none cursor-pointer">
+              <button onClick={closePayModal} disabled={isProcessing} className="flex-1 h-12 border border-outline-variant rounded-md text-sm font-semibold font-sans outline-none cursor-pointer disabled:opacity-50">
                 Cancelar
               </button>
-              <button onClick={handleProcessPay} className="flex-1 h-12 bg-primary hover:bg-primary-container text-white rounded-md text-sm font-bold font-sans shadow-sm outline-none cursor-pointer">
-                Confirmar Venta
+              <button onClick={handleProcessPay} disabled={isProcessing} className="flex-1 h-12 bg-primary hover:bg-primary-container disabled:opacity-50 text-white rounded-md text-sm font-bold font-sans shadow-sm outline-none cursor-pointer disabled:cursor-not-allowed">
+                {isProcessing ? (
+                  <span className="animate-spin material-symbols-outlined text-[18px]">progress_activity</span>
+                ) : 'Confirmar Venta'}
               </button>
             </div>
           </div>
@@ -612,56 +621,59 @@ export default function POSView({
       {/* Cash Movement Modal */}
       {cashModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={closeCashModal}>
-          <div className="bg-white rounded-xl border border-outline-variant shadow-xl w-[380px] p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-sans font-bold text-on-surface">Movimiento de Caja</h3>
-            <p className="text-xs font-sans text-on-surface-variant font-semibold mt-1">Registrar entrada o salida de efectivo.</p>
+          <div className="bg-white rounded-xl border border-outline-variant shadow-xl w-[520px] p-8" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-sans font-bold text-on-surface">Movimiento de Caja</h3>
+            <p className="text-sm font-sans text-on-surface-variant font-semibold mt-1">Registrar entrada o salida de efectivo con desglose por denominación.</p>
 
-            <div className="mt-5 space-y-4">
+            <div className="mt-6 space-y-5">
               <div>
-                <label className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider font-sans">Tipo</label>
-                <div className="flex gap-2 mt-1">
+                <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider font-sans">Tipo de movimiento</label>
+                <div className="flex gap-3 mt-1.5">
                   <button
                     onClick={() => setCashMoveType('in')}
-                    className={`flex-1 h-10 rounded-md border text-xs font-semibold font-sans transition-all outline-none cursor-pointer ${cashMoveType === 'in' ? 'bg-success-container text-success border-success' : 'border-outline-variant'}`}
+                    className={`flex-1 h-11 rounded-md border text-sm font-semibold font-sans transition-all outline-none cursor-pointer ${cashMoveType === 'in' ? 'bg-success-container text-success border-success' : 'border-outline-variant'}`}
                   >
                     Entrada
                   </button>
                   <button
                     onClick={() => setCashMoveType('out')}
-                    className={`flex-1 h-10 rounded-md border text-xs font-semibold font-sans transition-all outline-none cursor-pointer ${cashMoveType === 'out' ? 'bg-error-container text-error border-error' : 'border-outline-variant'}`}
+                    className={`flex-1 h-11 rounded-md border text-sm font-semibold font-sans transition-all outline-none cursor-pointer ${cashMoveType === 'out' ? 'bg-error-container text-error border-error' : 'border-outline-variant'}`}
                   >
                     Salida
                   </button>
                 </div>
               </div>
-              <div className="border border-outline-variant rounded-md p-3">
-                <p className="text-[10px] font-bold font-sans text-on-surface-variant uppercase tracking-wider mb-2">Desglose por denominación</p>
+              <div className="border border-outline-variant rounded-md p-4">
+                <p className="text-xs font-bold font-sans text-on-surface-variant uppercase tracking-wider mb-3">Desglose por denominación</p>
                 <DenominationPad counts={cashMoveCounts} onChange={(c) => {
                   setCashMoveCounts(c);
                   setCashMoveAmount(String(calcTotal(c)));
                 }} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider font-sans">Nota</label>
+                <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider font-sans">Nota</label>
                 <input
                   type="text"
                   value={cashMoveNote}
                   onChange={(e) => setCashMoveNote(e.target.value)}
                   placeholder="Motivo del movimiento"
-                  className="h-10 border border-outline rounded px-3 focus:border-tertiary outline-none text-sm font-sans"
+                  className="h-11 border border-outline rounded px-3 focus:border-tertiary outline-none text-sm font-sans"
                 />
               </div>
             </div>
 
-            <div className="flex gap-2 mt-5">
-              <button onClick={closeCashModal} className="flex-1 h-10 border border-outline-variant rounded-md text-xs font-semibold font-sans outline-none cursor-pointer">
+            <div className="flex gap-3 mt-6">
+              <button onClick={closeCashModal} disabled={isProcessing} className="flex-1 h-11 border border-outline-variant rounded-md text-sm font-semibold font-sans outline-none cursor-pointer disabled:opacity-50">
                 Cancelar
               </button>
               <button
                 onClick={handleCashMovement}
-                className="flex-1 h-10 bg-primary hover:bg-primary-container text-white rounded-md text-xs font-bold font-sans shadow-sm outline-none cursor-pointer"
+                disabled={isProcessing}
+                className="flex-1 h-11 bg-primary hover:bg-primary-container disabled:opacity-50 text-white rounded-md text-sm font-bold font-sans shadow-sm outline-none cursor-pointer disabled:cursor-not-allowed"
               >
-                Registrar
+                {isProcessing ? (
+                  <span className="animate-spin material-symbols-outlined text-[18px]">progress_activity</span>
+                ) : 'Registrar'}
               </button>
             </div>
           </div>

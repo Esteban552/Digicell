@@ -58,6 +58,7 @@ export interface CashRegistryMovement {
   amount: number;
   note: string;
   time: string;
+  createdAt: string;
 }
 
 export type UserRole = 'admin' | 'technician';

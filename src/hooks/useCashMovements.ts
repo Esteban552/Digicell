@@ -15,6 +15,7 @@ function dbToComponent(db: DBCashMovement): CashRegistryMovement {
     amount: db.amount,
     note: db.note,
     time: formatTime(db.created_at),
+    createdAt: db.created_at,
   };
 }
 

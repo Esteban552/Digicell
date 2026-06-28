@@ -9,7 +9,6 @@ import { ActiveView } from '../types';
 interface HeaderProps {
   activeView: ActiveView;
   user: string | null;
-  onOpenSearchModal: () => void;
   onCreateNewRepair: () => void;
   onDeleteCurrentRepair: () => void;
   onReprintCurrentRepair: () => void;
@@ -22,7 +21,6 @@ interface HeaderProps {
 export default function Header({
   activeView,
   user,
-  onOpenSearchModal,
   onCreateNewRepair,
   onDeleteCurrentRepair,
   onReprintCurrentRepair,
@@ -122,25 +120,7 @@ export default function Header({
 
       {/* Trailing Actions & Profile */}
       <div className="flex items-center gap-4 ml-auto text-primary">
-        {/* Quick Search trigger F8 button for other views */}
-        {activeView !== 'repairs' && (
-          <button 
-            onClick={onOpenSearchModal}
-            className="text-on-surface-variant hover:bg-surface-variant p-2 rounded-full transition-all duration-200 flex items-center justify-center outline-none cursor-pointer"
-            title="Abrir búsqueda rápida (F8)"
-          >
-            <span className="material-symbols-outlined text-[20px]">search</span>
-          </button>
-        )}
 
-        <div className="flex gap-1.5">
-          <button className="p-1.5 rounded-full text-on-surface-variant hover:bg-surface-variant transition-colors flex items-center justify-center select-none cursor-pointer outline-none">
-            <span className="material-symbols-outlined text-[20px]">wifi</span>
-          </button>
-          <button className="p-1.5 rounded-full text-on-surface-variant hover:bg-surface-variant transition-colors flex items-center justify-center select-none cursor-pointer outline-none">
-            <span className="material-symbols-outlined text-[20px]">schedule</span>
-          </button>
-        </div>
         
         <div className="h-6 w-px bg-outline-variant mx-1"></div>
         

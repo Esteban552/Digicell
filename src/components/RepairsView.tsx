@@ -25,14 +25,17 @@ interface RepairsViewProps {
   draftRepair: RepairOrder;
   draftId: string;
   onSelectRepair: (id: string) => void;
+  isSaving?: boolean;
+  printModalOpen: boolean;
+  onSetPrintModalOpen: (open: boolean) => void;
 }
 
 export default function RepairsView({
   repairs, selectedId, onUpdateRepair, onSaveRepairOrder, showToast,
   searchModalOpen, onSetSearchModalOpen, serviciosModalOpen, onSetServiciosModalOpen,
-  onDeleteCompletedRepairs, draftRepair, draftId, onSelectRepair,
+  onDeleteCompletedRepairs, draftRepair, draftId, onSelectRepair, isSaving,
+  printModalOpen, onSetPrintModalOpen,
 }: RepairsViewProps) {
-  const [printModalOpen, setPrintModalOpen] = useState(false);
   const [deliveryConfirmPending, setDeliveryConfirmPending] = useState(false);
 
   useEffect(() => { setDeliveryConfirmPending(false); }, [selectedId]);
@@ -67,17 +70,20 @@ export default function RepairsView({
 
   const handleUpdateField = (key: keyof RepairOrder, value: string | number | boolean) => {
     if (isDelivered) return;
-    if (!isDraft && key !== 'status' && key !== 'internalNotes') return;
     onUpdateRepair(activeRepair.id, { [key]: value });
   };
 
   const triggerWhatsApp = () => {
     const phoneClean = activeRepair.clientPhone.replace(/\D/g, '');
+    if (!phoneClean || phoneClean.length < 10) {
+      showToast('WhatsApp no disponible', 'El cliente no tiene un número de teléfono válido.', 'error');
+      return;
+    }
     const text = encodeURIComponent(
       `Hola ${activeRepair.clientName}, de parte de Digicell Repairs. Su dispositivo ${activeRepair.deviceBrand} ${activeRepair.deviceModel} (Folio #${activeRepair.id}) está registrado bajo el estado: "${activeRepair.status.toUpperCase()}". Costo estimado: $${activeRepair.totalCost.toFixed(2)}, Anticipo: $${activeRepair.advancePaid.toFixed(2)}. Saldo pendiente: $${remainingCalculated.toFixed(2)}.`,
     );
-    window.open(`https://api.whatsapp.com/send?phone=${phoneClean || '5550000000'}&text=${text}`, '_blank', 'noreferrer');
-    showToast('WhatsApp Preparado', 'Simulando apertura de chat con plantilla de entrega.', 'success');
+    window.open(`https://api.whatsapp.com/send?phone=${phoneClean}&text=${text}`, '_blank', 'noreferrer');
+    showToast('WhatsApp Preparado', 'Chat abierto con plantilla de entrega.', 'success');
   };
 
   const saveOrConfirm = async () => {
@@ -137,7 +143,8 @@ export default function RepairsView({
             onUpdateField={handleUpdateField}
             onSave={() => onSaveRepairOrder(activeRepair.id)}
             onConfirmDelivery={saveOrConfirm}
-            onPrint={() => setPrintModalOpen(true)}
+            isSaving={isSaving}
+            onPrint={() => onSetPrintModalOpen(true)}
             onWhatsApp={triggerWhatsApp}
           />
         </div>
@@ -154,11 +161,7 @@ export default function RepairsView({
         open={printModalOpen}
         repair={activeRepair}
         remainingCalculated={remainingCalculated}
-        onClose={() => setPrintModalOpen(false)}
-        onPrint={() => {
-          setPrintModalOpen(false);
-          showToast('Comprobante enviado', `Simulando impresión térmica en folio #${activeRepair.id}.`, 'success');
-        }}
+        onClose={() => onSetPrintModalOpen(false)}
       />
 
       <ServiciosModal
@@ -167,6 +170,7 @@ export default function RepairsView({
         repairs={repairs}
         onDeleteCompletedRepairs={onDeleteCompletedRepairs}
         onSelectRepair={onSelectRepair}
+        isSaving={isSaving}
       />
     </div>
   );

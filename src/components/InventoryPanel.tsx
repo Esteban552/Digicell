@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Product } from '../lib/supabase-types';
 
-function onlyText(v: string) {
-  return v.replace(/[0-9]/g, '');
+function sanitizeName(v: string) {
+  return v.replace(/[<>"']/g, '');
 }
 
 interface InventoryPanelProps {
@@ -122,13 +122,8 @@ export default function InventoryPanel({ products, onRefetchProducts, showToast 
               type="text"
               value={name}
               onChange={(e) => {
-                const v = onlyText(e.target.value);
-                if (v !== e.target.value) {
-                  setNameError('Solo se permiten letras');
-                  setTimeout(() => setNameError(''), 2000);
-                } else {
-                  setNameError('');
-                }
+                const v = sanitizeName(e.target.value);
+                setNameError('');
                 setName(v);
               }}
               placeholder="Nombre del producto"

@@ -6,13 +6,15 @@ interface DashboardViewProps {
   onLogout: () => void;
   urgentCount: number;
   inProgressCount: number;
+  userName: string;
 }
 
 export default function DashboardView({
   onViewChange,
   onLogout,
   urgentCount,
-  inProgressCount
+  inProgressCount,
+  userName
 }: DashboardViewProps) {
   return (
     <div className="flex-1 flex flex-col gap-6">
@@ -20,7 +22,7 @@ export default function DashboardView({
       {/* Upper Brand Greetings */}
       <div className="select-none">
         <h2 className="text-3xl font-bold text-on-surface tracking-tight font-sans">
-          Bienvenido de vuelta, Técnico.
+          Bienvenido de vuelta, {userName}.
         </h2>
         <p className="text-sm font-sans text-on-surface-variant mt-1.5 font-medium">
           ¿Qué te gustaría hacer hoy?

@@ -5,15 +5,18 @@ interface SettingsViewProps {
   showToast: (title: string, desc: string, type: 'success' | 'info' | 'error') => void;
   settings: Record<string, string>;
   updateSetting: (key: string, value: string) => Promise<void>;
+  userRole?: string;
 }
 
-export default function SettingsView({ user, showToast, settings, updateSetting }: SettingsViewProps) {
+export default function SettingsView({ user, showToast, settings, updateSetting, userRole = 'technician' }: SettingsViewProps) {
   const exchangeRate = settings.exchange_rate ?? '18.50';
   const taxRate = settings.tax_rate ?? '16';
   const shopName = settings.shop_name ?? 'Digicell Centro';
   const isBackupEnabled = settings.backup_enabled !== 'false';
+  const startingFund = settings.starting_fund ?? '1000';
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
   const setError = (k: string, m: string) => setErrors(p => ({ ...p, [k]: m }));
   const clearError = (k: string) => setErrors(p => { const n = { ...p }; delete n[k]; return n; });
 
@@ -41,12 +44,15 @@ export default function SettingsView({ user, showToast, settings, updateSetting 
     const form = e.target as HTMLFormElement;
     const fd = new FormData(form);
     if (!validateAll(fd)) return;
+    setIsSaving(true);
     await Promise.all([
       updateSetting('shop_name', (fd.get('shop_name') as string) ?? 'Digicell Centro'),
       updateSetting('exchange_rate', (fd.get('exchange_rate') as string) ?? '18.50'),
       updateSetting('tax_rate', (fd.get('tax_rate') as string) ?? '16'),
+      updateSetting('starting_fund', (fd.get('starting_fund') as string) ?? '1000'),
       updateSetting('backup_enabled', fd.get('backup_enabled') === 'on' ? 'true' : 'false'),
     ]);
+    setIsSaving(false);
     showToast('Configuración Guardada', 'Las tasas de cambio y datos fiscales se actualizaron con éxito.', 'success');
   };
 
@@ -101,6 +107,16 @@ export default function SettingsView({ user, showToast, settings, updateSetting 
           </div>
         </div>
 
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">Fondo Inicial de Caja ($)</label>
+          <input
+            type="text"
+            name="starting_fund"
+            defaultValue={startingFund}
+            className="h-10 border border-outline rounded px-3 focus:border-tertiary outline-none text-sm font-sans font-semibold"
+          />
+        </div>
+
         <div className="py-2 border-t border-b border-slate-100 flex items-center justify-between font-sans">
           <div>
             <h4 className="font-bold text-on-surface leading-tight text-xs">Respaldo en la Nube</h4>
@@ -118,15 +134,18 @@ export default function SettingsView({ user, showToast, settings, updateSetting 
 
         <div className="bg-surface-container-low border border-outline-variant rounded p-3 text-on-surface flex items-center gap-2 font-sans select-none text-[11px] leading-normal font-medium text-on-surface-variant">
           <span className="material-symbols-outlined text-tertiary text-lg">info</span>
-          <span>Conectado como <b>{user || 'J. Cashier'}</b> con privilegios de técnico.</span>
+           <span>Conectado como <b>{user || 'J. Cashier'}</b> con privilegios de {userRole === 'admin' ? 'administrador' : 'técnico'}.</span>
         </div>
 
         <div className="pt-2 flex justify-end">
           <button
             type="submit"
-            className="px-6 h-11 bg-primary hover:bg-primary-container text-white rounded font-sans text-xs font-bold shadow-md shadow-primary/20 hover:shadow-lg transition-all outline-none"
+            disabled={isSaving}
+            className="px-6 h-11 bg-primary hover:bg-primary-container disabled:opacity-50 text-white rounded font-sans text-xs font-bold shadow-md shadow-primary/20 hover:shadow-lg transition-all outline-none disabled:cursor-not-allowed"
           >
-            Guardar Configuración
+            {isSaving ? (
+              <span className="animate-spin material-symbols-outlined text-[16px]">progress_activity</span>
+            ) : 'Guardar Configuración'}
           </button>
         </div>
 

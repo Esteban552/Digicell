@@ -11,6 +11,7 @@ interface ActionsPanelProps {
   onConfirmDelivery: () => void;
   onPrint: () => void;
   onWhatsApp: () => void;
+  isSaving?: boolean;
 }
 
 export default function ActionsPanel({
@@ -23,6 +24,7 @@ export default function ActionsPanel({
   onConfirmDelivery,
   onPrint,
   onWhatsApp,
+  isSaving,
 }: ActionsPanelProps) {
   return (
     <div className="flex flex-col gap-4">
@@ -69,7 +71,8 @@ export default function ActionsPanel({
           <button
             type="button"
             onClick={onConfirmDelivery}
-            className="w-full bg-error hover:bg-error/90 text-white text-xs font-bold py-2.5 rounded transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer outline-none animate-pulse"
+            disabled={isSaving}
+            className="w-full bg-error hover:bg-error/90 disabled:opacity-50 text-white text-xs font-bold py-2.5 rounded transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer disabled:cursor-not-allowed outline-none animate-pulse"
           >
             <span className="material-symbols-outlined text-[16px]">warning</span>
             Confirmar Entrega
@@ -78,9 +81,14 @@ export default function ActionsPanel({
           <button
             type="button"
             onClick={onSave}
-            className="w-full bg-primary hover:bg-primary-container text-white text-xs font-bold py-2.5 rounded transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer outline-none"
+            disabled={isSaving}
+            className="w-full bg-primary hover:bg-primary-container disabled:opacity-50 text-white text-xs font-bold py-2.5 rounded transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer disabled:cursor-not-allowed outline-none"
           >
-            <span className="material-symbols-outlined text-[16px]">save</span>
+            {isSaving ? (
+              <span className="animate-spin material-symbols-outlined text-[16px]">progress_activity</span>
+            ) : (
+              <span className="material-symbols-outlined text-[16px]">save</span>
+            )}
             {isDraft ? 'Guardar Nota' : 'Guardar Cambios'}
           </button>
         )}

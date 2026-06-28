@@ -46,6 +46,7 @@ export function useRepairEditor(
 
   const [draftRepair, setDraftRepair] = useState<RepairOrder>(blankRepair);
   const [selectedRepairId, setSelectedRepairId] = useState<string>('');
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (repairs.length > 0 && !selectedRepairId) {
@@ -69,6 +70,8 @@ export function useRepairEditor(
   }, []);
 
   const handleSaveRepairOrder = useCallback(async (id: string) => {
+    setIsSaving(true);
+    try {
     let orderRef = id === DRAFT_ID ? draftRepair : repairs.find(r => r.id === id);
     if (!orderRef) return;
 
@@ -80,6 +83,17 @@ export function useRepairEditor(
         setRepairs(prev => prev.map(r => r.id === id ? { ...r, warrantyEnd: thirtyDaysFromNow } : r));
       }
       orderRef = { ...orderRef, warrantyEnd: thirtyDaysFromNow };
+
+      const remaining = Math.max(0, orderRef.totalCost - orderRef.advancePaid - orderRef.abonosPaid);
+      if (remaining > 0) {
+        const newAbonos = orderRef.abonosPaid + remaining;
+        if (id === DRAFT_ID) {
+          setDraftRepair(prev => ({ ...prev, abonosPaid: newAbonos }));
+        } else {
+          setRepairs(prev => prev.map(r => r.id === id ? { ...r, abonosPaid: newAbonos } : r));
+        }
+        orderRef = { ...orderRef, abonosPaid: newAbonos };
+      }
     }
 
     const errors = validateRepair(orderRef);
@@ -166,6 +180,9 @@ export function useRepairEditor(
       refetchLogs();
       showToast('Nota Actualizada', `Orden #${orderRef.id} guardada correctamente.`, 'success');
     }
+    } finally {
+      setIsSaving(false);
+    }
   }, [draftRepair, repairs, showToast, refetchLogs, syncRepairToDb]);
 
   const handleDeleteCurrentRepair = useCallback(async () => {
@@ -176,10 +193,12 @@ export function useRepairEditor(
       return;
     }
     if (confirm(`¿Seguro que deseas eliminar permanentemente el folio #${selectedRepairId}?`)) {
+      setIsSaving(true);
       await removeRepairFromDb(selectedRepairId);
       setRepairs(prev => prev.filter(r => r.id !== selectedRepairId));
       refetchLogs();
       showToast('Registro eliminado', `Se descartó el folio #${selectedRepairId} del registro.`, 'error');
+      setIsSaving(false);
 
       const remaining = repairs.filter(r => r.id !== selectedRepairId);
       if (remaining.length > 0) {
@@ -212,6 +231,8 @@ export function useRepairEditor(
   }, [repairs, showToast, onNavigate]);
 
   const handleDeleteCompletedRepairs = useCallback(async (count: number) => {
+    setIsSaving(true);
+    try {
     const { data: toDelete, error: fetchErr } = await supabase
       .from('repair_orders')
       .select('id')
@@ -237,6 +258,9 @@ export function useRepairEditor(
 
     await refetchRepairs();
     showToast('Órdenes eliminadas', `Se eliminaron ${ids.length} órdenes entregadas.`, 'success');
+    } finally {
+      setIsSaving(false);
+    }
   }, [showToast, refetchRepairs]);
 
   const handleClearRepairForm = useCallback(() => {
@@ -251,6 +275,8 @@ export function useRepairEditor(
     repairs,
     setRepairs,
     repairsError,
+    repairsLoading,
+    isSaving,
     draftRepair,
     selectedRepairId,
     setSelectedRepairId,

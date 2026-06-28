@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
 import Sidebar from './components/Sidebar';
@@ -15,11 +15,12 @@ import RepairsView from './components/RepairsView';
 import ReportsView from './components/ReportsView';
 import SettingsView from './components/SettingsView';
 import ArqueoCaja from './components/ArqueoCaja';
+import ErrorBoundary from './components/ErrorBoundary';
 import Toast from './components/Toast';
 
 import { INITIAL_CART } from './data';
 import { supabase } from './lib/supabase';
-import { useRepairOrders } from './hooks/useRepairOrders';
+
 import { useCashMovements } from './hooks/useCashMovements';
 import { useActivityLogs } from './hooks/useActivityLogs';
 import { useSettings } from './hooks/useSettings';
@@ -101,25 +102,37 @@ export default function App() {
   const { toastMessage, showToast, setToastMessage } = useToast();
 
   // Data hooks
-  const { data: logs, error: logsError, refetch: refetchLogs } = useActivityLogs();
-  const { data: cashMovements, error: cashError, add: addCashMovement } = useCashMovements();
-  const { data: settings, error: settingsError, update: updateSetting } = useSettings();
-  const { data: products, error: productsError, refetch: refetchProducts } = useProducts();
-  const { error: repairsError } = useRepairOrders();
+  const { data: logs, loading: logsLoading, error: logsError, refetch: refetchLogs } = useActivityLogs();
+  const { data: cashMovements, loading: cashLoading, error: cashError, add: addCashMovement } = useCashMovements();
+  const { data: settings, loading: settingsLoading, error: settingsError, update: updateSetting } = useSettings();
+  const { data: products, loading: productsLoading, error: productsError, refetch: refetchProducts } = useProducts();
   const [cart, setCart] = useState<CartItem[]>(INITIAL_CART);
 
+  // Repair editor — manages all repair state and CRUD
+  const repairEditor = useRepairEditor(showToast, refetchLogs, setCurrentView);
+
   // Surface hook errors to user via toast
-  useEffect(() => { if (repairsError) showToast('Error en reparaciones', repairsError, 'error'); }, [repairsError, showToast]);
+  useEffect(() => { if (repairEditor.repairsError) showToast('Error en reparaciones', repairEditor.repairsError, 'error'); }, [repairEditor.repairsError, showToast]);
   useEffect(() => { if (logsError) showToast('Error en actividad', logsError, 'error'); }, [logsError, showToast]);
   useEffect(() => { if (cashError) showToast('Error en caja', cashError, 'error'); }, [cashError, showToast]);
   useEffect(() => { if (settingsError) showToast('Error en configuración', settingsError, 'error'); }, [settingsError, showToast]);
   useEffect(() => { if (productsError) showToast('Error en inventario', productsError, 'error'); }, [productsError, showToast]);
 
-  // Repair editor — manages all repair state and CRUD
-  const repairEditor = useRepairEditor(showToast, refetchLogs, setCurrentView);
+  const repairsLoading = repairEditor.repairsLoading;
+  const startingFund = Number(settings.starting_fund) || 1000;
+
+  const [dataReady, setDataReady] = useState(false);
+
+  useEffect(() => {
+    if (!session) { setDataReady(false); return; }
+    if (!logsLoading && !cashLoading && !settingsLoading && !productsLoading && !repairsLoading) {
+      setDataReady(true);
+    }
+  }, [session, logsLoading, cashLoading, settingsLoading, productsLoading, repairsLoading]);
 
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [serviciosModalOpen, setServiciosModalOpen] = useState(false);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
 
   // Global Keyboard listener shortcuts
   useEffect(() => {
@@ -134,6 +147,11 @@ export default function App() {
     window.addEventListener('keydown', handleGlobalShortcuts);
     return () => window.removeEventListener('keydown', handleGlobalShortcuts);
   }, [session, showToast]);
+
+  const handleReprint = useCallback(() => {
+    repairEditor.handleReprintCurrentRepair();
+    setPrintModalOpen(true);
+  }, [repairEditor]);
 
   const handleLogout = async () => {
     if (confirm('¿Seguro que deseas salir y cerrar sesión?')) {
@@ -214,7 +232,7 @@ export default function App() {
   };
 
   // Live total financial summaries
-  const { calculatedStats, dashboardBentoStats } = useAppStats(logs, repairEditor.repairs);
+  const { calculatedStats, dashboardBentoStats } = useAppStats(logs, repairEditor.repairs, startingFund);
 
   if (authLoading) return (
     <div className="min-h-screen flex items-center justify-center bg-surface-bright">
@@ -238,18 +256,28 @@ export default function App() {
         <Header
           activeView={currentView}
           user={userName}
-          onOpenSearchModal={() => setSearchModalOpen(true)}
           onCreateNewRepair={repairEditor.handleCreateNewRepair}
           onDeleteCurrentRepair={repairEditor.handleDeleteCurrentRepair}
-          onReprintCurrentRepair={repairEditor.handleReprintCurrentRepair}
+          onReprintCurrentRepair={handleReprint}
           onClearRepairForm={repairEditor.handleClearRepairForm}
           onOpenServiciosModal={() => setServiciosModalOpen(true)}
           onJumpToRepair={repairEditor.handleJumpToRepair}
           currentRepairId={repairEditor.selectedRepairId}
         />
 
+        <ErrorBoundary>
         <main className={`flex-1 p-6 ${session ? 'mt-16' : 'mt-0'} overflow-y-auto bg-surface-container-lowest h-[calc(100vh-4rem)]`}>
           <div className="max-w-7xl mx-auto h-full flex flex-col">
+
+            {session && !dataReady ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="flex flex-col items-center gap-3">
+                  <span className="animate-spin material-symbols-outlined text-primary text-4xl">progress_activity</span>
+                  <p className="text-sm font-sans text-on-surface-variant font-medium">Cargando datos...</p>
+                </div>
+              </div>
+            ) : (
+              <>
 
             {currentView === 'login' && <LoginView />}
 
@@ -259,6 +287,7 @@ export default function App() {
                 onLogout={handleLogout}
                 urgentCount={dashboardBentoStats.urgent}
                 inProgressCount={dashboardBentoStats.inProgress}
+                userName={userName}
               />
             )}
 
@@ -295,6 +324,9 @@ export default function App() {
                   setCurrentView('repairs');
                   setServiciosModalOpen(false);
                 }}
+                isSaving={repairEditor.isSaving}
+                printModalOpen={printModalOpen}
+                onSetPrintModalOpen={setPrintModalOpen}
               />
             )}
 
@@ -309,15 +341,19 @@ export default function App() {
             )}
 
             {currentView === 'arqueo' && (
-              <ArqueoCaja movements={cashMovements} />
+              <ArqueoCaja movements={cashMovements} startingFund={startingFund} />
             )}
 
             {currentView === 'settings' && (
-              <SettingsView user={userName} showToast={showToast} settings={settings} updateSetting={updateSetting} />
+              <SettingsView user={userName} showToast={showToast} settings={settings} updateSetting={updateSetting} userRole={userRole} />
+            )}
+
+              </>
             )}
 
           </div>
         </main>
+        </ErrorBoundary>
 
       </div>
 

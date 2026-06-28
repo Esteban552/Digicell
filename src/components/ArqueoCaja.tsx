@@ -5,11 +5,24 @@ import { DENOMS, emptyCounts, calcTotal, type DenomCounts } from '../lib/denomin
 
 interface ArqueoCajaProps {
   movements: CashRegistryMovement[];
+  startingFund?: number;
 }
 
-export default function ArqueoCaja({ movements }: ArqueoCajaProps) {
-  const STARTING_FUND = 1000;
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+
+export default function ArqueoCaja({ movements, startingFund = 1000 }: ArqueoCajaProps) {
+  const [filterDate, setFilterDate] = useState(todayStr());
   const [physicalCounts, setPhysicalCounts] = useState<DenomCounts>(emptyCounts);
+
+  const filteredMovements = useMemo(() => {
+    if (!filterDate) return movements;
+    return movements.filter(m => m.createdAt?.startsWith(filterDate));
+  }, [movements, filterDate]);
 
   const totals = useMemo(() => {
     let entries = 0;
@@ -17,11 +30,10 @@ export default function ArqueoCaja({ movements }: ArqueoCajaProps) {
     const entryCounts = emptyCounts();
     const exitCounts = emptyCounts();
 
-    for (const m of movements) {
+    for (const m of filteredMovements) {
       const amt = m.amount;
       if (m.type === 'in') {
         entries += amt;
-        // Try to parse denominations from note: "motivo | 2× $500, 1× $100"
         const parts = m.note.split(' | ');
         if (parts.length > 1) {
           parts[1].split(', ').forEach(p => {
@@ -56,18 +68,34 @@ export default function ArqueoCaja({ movements }: ArqueoCajaProps) {
     }
 
     return { entries, exits, entryCounts, exitCounts };
-  }, [movements]);
+  }, [filteredMovements]);
 
-  const expectedTotal = STARTING_FUND + totals.entries - totals.exits;
+  const expectedTotal = startingFund + totals.entries - totals.exits;
   const physicalTotal = calcTotal(physicalCounts);
   const difference = physicalTotal - expectedTotal;
   const isBalanced = difference === 0;
 
   return (
     <div className="flex flex-col gap-4 h-full">
-      <div>
-        <h2 className="text-2xl font-bold text-on-surface tracking-tight font-sans">Arqueo de Caja</h2>
-        <p className="text-xs font-sans text-on-surface-variant font-medium mt-1">Cierre de turno — conteo físico de efectivo.</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-on-surface tracking-tight font-sans">Arqueo de Caja</h2>
+          <p className="text-xs font-sans text-on-surface-variant font-medium mt-1">Cierre de turno — conteo físico de efectivo.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+            className="h-9 border border-outline rounded px-3 focus:border-tertiary outline-none text-xs font-sans"
+          />
+          <button
+            onClick={() => setFilterDate('')}
+            className="h-9 px-3 text-xs font-bold font-sans bg-tertiary/10 text-tertiary rounded hover:bg-tertiary hover:text-white transition-all outline-none cursor-pointer whitespace-nowrap"
+          >
+            Mostrar Todas
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0">
@@ -81,14 +109,14 @@ export default function ArqueoCaja({ movements }: ArqueoCajaProps) {
           <div className="space-y-2 text-xs font-sans">
             <div className="flex justify-between py-1.5 border-b border-outline-variant/50">
               <span className="text-on-surface-variant font-semibold">Fondo inicial</span>
-              <span className="font-bold">${STARTING_FUND.toFixed(2)}</span>
+              <span className="font-bold">${startingFund.toFixed(2)}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-outline-variant/50">
-              <span className="text-success font-semibold">+ Entradas del día</span>
+              <span className="text-success font-semibold">+ Entradas{filterDate ? ' del día' : ''}</span>
               <span className="font-bold text-success">${totals.entries.toFixed(2)}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-outline-variant/50">
-              <span className="text-error font-semibold">- Salidas del día</span>
+              <span className="text-error font-semibold">- Salidas{filterDate ? ' del día' : ''}</span>
               <span className="font-bold text-error">${totals.exits.toFixed(2)}</span>
             </div>
             <div className="flex justify-between py-2">
@@ -104,7 +132,7 @@ export default function ArqueoCaja({ movements }: ArqueoCajaProps) {
             </p>
             {DENOMS.filter(d => (totals.entryCounts[d.value] || 0) > 0 || (totals.exitCounts[d.value] || 0) > 0).length === 0 ? (
               <p className="text-[11px] font-sans text-on-surface-variant italic">
-                No hay movimientos con desglose por denominación registrados hoy.
+                No hay movimientos con desglose por denominación registrados{filterDate ? ' en esta fecha' : ''}.
               </p>
             ) : (
               <div className="space-y-1">
@@ -127,13 +155,13 @@ export default function ArqueoCaja({ movements }: ArqueoCajaProps) {
           {/* Recent movements */}
           <div className="mt-4 pt-3 border-t border-outline-variant">
             <p className="text-[10px] font-bold font-sans text-on-surface-variant uppercase tracking-wider mb-2">
-              Movimientos del día
+              Movimientos{filterDate ? ' del día' : ''} ({filteredMovements.length})
             </p>
-            {movements.length === 0 ? (
-              <p className="text-[11px] font-sans text-on-surface-variant italic">Sin movimientos registrados.</p>
+            {filteredMovements.length === 0 ? (
+              <p className="text-[11px] font-sans text-on-surface-variant italic">Sin movimientos registrados{filterDate ? ' para esta fecha' : ''}.</p>
             ) : (
               <div className="space-y-1 max-h-48 overflow-y-auto">
-                {movements.map(m => (
+                {filteredMovements.map(m => (
                   <div key={m.id} className="flex items-center justify-between py-1 px-2 rounded hover:bg-surface-container-low">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className={`material-symbols-outlined text-[14px] shrink-0 ${m.type === 'in' ? 'text-success' : 'text-error'}`}>
