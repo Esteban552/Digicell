@@ -63,4 +63,21 @@ export interface CashRegistryMovement {
 
 export type UserRole = 'admin' | 'technician';
 
+export interface POSTicketData {
+  saleId: number;
+  createdAt: string;
+  items: { name: string; qty: number; price: number; total: number }[];
+  subtotal: number;
+  discount: number;
+  tax: number;
+  taxRate: number;
+  total: number;
+  cashAmount: number;
+  cardAmount: number;
+  usdAmount: number;
+  usdExchangeRate: number;
+  change: number;
+  attendant: string;
+}
+
 export type ActiveView = 'login' | 'dashboard' | 'pos' | 'repairs' | 'reports' | 'settings' | 'arqueo';

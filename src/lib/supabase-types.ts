@@ -113,6 +113,7 @@ export interface Sale {
   card_amount: number;
   usd_amount: number;
   subtotal: number;
+  discount: number;
   tax: number;
   total: number;
   created_by: string | null;

@@ -15,7 +15,7 @@ function getCartQtyForProduct(cart: CartItem[], productId: number) {
 interface POSViewProps {
   cart: CartItem[];
   onSetCart: (cart: CartItem[] | ((p: CartItem[]) => CartItem[])) => void;
-  onCompleteCheckout: (amountLocal: number, amountCard: number, amountUsd: number) => Promise<void>;
+  onCompleteCheckout: (amountLocal: number, amountCard: number, amountUsd: number, discount?: number) => Promise<void>;
   onRegisterCashMovement: (type: 'in' | 'out', amount: number, note: string) => Promise<void>;
   showToast: (title: string, desc: string, type: 'success' | 'info' | 'error') => void;
   products: Product[];
@@ -44,6 +44,10 @@ export default function POSView({
   const [nameError, setNameError] = useState('');
   const [qtyError, setQtyError] = useState('');
   const [priceError, setPriceError] = useState('');
+
+  // Discount state
+  const [discountPct, setDiscountPct] = useState(0);
+  const [discountAmt, setDiscountAmt] = useState(0);
 
   // Tab state
   const [activeTab, setActiveTab] = useState<'venta' | 'inventario'>('venta');
@@ -82,20 +86,29 @@ export default function POSView({
     ).slice(0, 4);
   }, [itemName, products]);
 
-  // Totals calculations
+  // Discount + totals calculations
   const subtotal = useMemo(() => {
     return cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
   }, [cart]);
 
-  const effectiveTaxRate = taxRate; // ya viene parseado desde App
+  const effectiveTaxRate = taxRate;
+
+  const discountAmtSynced = useMemo(() => {
+    if (discountPct > 0) return subtotal * (discountPct / 100);
+    return discountAmt;
+  }, [discountPct, discountAmt, subtotal]);
+
+  const taxable = useMemo(() => {
+    return Math.max(0, subtotal - discountAmtSynced);
+  }, [subtotal, discountAmtSynced]);
 
   const tax = useMemo(() => {
-    return subtotal * (effectiveTaxRate / 100);
-  }, [subtotal, effectiveTaxRate]);
+    return taxable * (effectiveTaxRate / 100);
+  }, [taxable, effectiveTaxRate]);
 
   const total = useMemo(() => {
-    return subtotal + tax;
-  }, [subtotal, tax]);
+    return taxable + tax;
+  }, [taxable, tax]);
 
   const totalUsd = useMemo(() => {
     return exchangeRate > 0 ? total / exchangeRate : 0;
@@ -114,16 +127,16 @@ export default function POSView({
     e.preventDefault();
     let hasError = false;
 
-    if (!itemName?.trim()) {
-      setNameError('El nombre del producto es obligatorio');
+    if (!selectedProductId) {
+      setNameError('Seleccioná un producto del catálogo o la lista de sugerencias');
       hasError = true;
     } else {
       setNameError('');
     }
 
     const finalPrice = Math.max(0, Number(itemPrice) || 0);
-    if (finalPrice <= 0) {
-      setPriceError('El precio debe ser mayor a 0');
+    if (finalPrice < 0) {
+      setPriceError('El precio no puede ser negativo');
       hasError = true;
     } else {
       setPriceError('');
@@ -194,6 +207,8 @@ export default function POSView({
     if (cart.length === 0) return;
     if (confirm('¿Seguro que deseas cancelar y vaciar la venta actual?')) {
       onSetCart([]);
+      setDiscountPct(0);
+      setDiscountAmt(0);
       showToast('Venta Cancelada', 'El carro ha sido regresado a cero.', 'error');
     }
   };
@@ -226,7 +241,9 @@ export default function POSView({
       return;
     }
     setIsProcessing(true);
-    await onCompleteCheckout(cash, card, usd);
+    await onCompleteCheckout(cash, card, usd, discountAmtSynced);
+    setDiscountPct(0);
+    setDiscountAmt(0);
     closePayModal();
     setIsProcessing(false);
   };
@@ -357,17 +374,9 @@ export default function POSView({
                   )}
                 </div>
                 <div>
-                  <input
-                    type="number"
-                    value={itemPrice}
-                    onChange={(e) => {
-                      setItemPrice(e.target.value);
-                      setPriceError('');
-                    }}
-                    placeholder="$ Precio"
-                    className={`h-10 w-full border ${priceError ? 'border-error' : 'border-outline'} rounded px-3 focus:border-tertiary outline-none text-sm font-sans`}
-                    step="0.01"
-                  />
+                  <div className={`h-10 w-full border ${priceError ? 'border-error' : 'border-outline'} rounded px-3 flex items-center text-sm font-sans ${selectedProductId ? 'bg-surface-container-low text-on-surface font-bold' : 'text-on-surface-variant'}`}>
+                    {selectedProductId ? `$${Number(itemPrice).toFixed(2)}` : 'Solo catálogo'}
+                  </div>
                   {priceError && (
                     <p className="text-[10px] font-sans text-error font-semibold mt-0.5">{priceError}</p>
                   )}
@@ -481,11 +490,53 @@ export default function POSView({
               )}
             </div>
 
-            {/* Totals + Action Buttons */}
+            {/* Totals + Discount + Action Buttons */}
             <div className="border-t border-outline-variant p-4 space-y-2">
               <div className="flex justify-between text-xs font-sans">
                 <span className="text-on-surface-variant font-semibold">Subtotal</span>
                 <span className="font-bold">${subtotal.toFixed(2)}</span>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs font-sans">
+                <span className="text-on-surface-variant font-semibold shrink-0">Descuento</span>
+                <div className="flex items-center gap-1 flex-1">
+                  <input
+                    type="number"
+                    value={discountPct || ''}
+                    onChange={(e) => {
+                      const pct = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                      setDiscountPct(pct);
+                      if (pct > 0) setDiscountAmt(0);
+                    }}
+                    placeholder="%"
+                    className="w-12 h-7 border border-outline rounded px-1.5 text-center text-[11px] font-sans outline-none focus:border-tertiary"
+                    min="0"
+                    max="100"
+                  />
+                  <span className="text-on-surface-variant text-[10px]">%</span>
+                  <span className="text-on-surface-variant">/</span>
+                  <input
+                    type="number"
+                    value={discountAmt || ''}
+                    onChange={(e) => {
+                      const amt = Math.max(0, Number(e.target.value) || 0);
+                      setDiscountAmt(amt);
+                      if (amt > 0) setDiscountPct(0);
+                    }}
+                    placeholder="$"
+                    className="w-16 h-7 border border-outline rounded px-1.5 text-center text-[11px] font-sans outline-none focus:border-tertiary"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                {discountAmtSynced > 0 && (
+                  <span className="font-bold text-tertiary shrink-0">-${discountAmtSynced.toFixed(2)}</span>
+                )}
+              </div>
+
+              <div className="flex justify-between text-xs font-sans">
+                <span className="text-on-surface-variant font-semibold">Base gravable</span>
+                <span className="font-bold">${taxable.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-xs font-sans">
                 <span className="text-on-surface-variant font-semibold">IVA ({effectiveTaxRate}%)</span>

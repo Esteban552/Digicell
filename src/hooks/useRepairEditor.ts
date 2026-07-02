@@ -173,10 +173,37 @@ export function useRepairEditor(
 
       setRepairs(prev => [newRepair, ...prev]);
       setSelectedRepairId(newRepair.id);
+
+      const { data: { user: u1 } } = await supabase.auth.getUser();
+      const newInserts: { type: 'in'; amount: number; note: string; created_by: string | null }[] = [];
+      if (orderRef.advancePaid > 0) newInserts.push({ type: 'in', amount: orderRef.advancePaid, note: `Anticipo Reparación #${newRepair.id}`, created_by: u1?.id ?? null });
+      if (orderRef.abonosPaid > 0) newInserts.push({ type: 'in', amount: orderRef.abonosPaid, note: `Abono Reparación #${newRepair.id}`, created_by: u1?.id ?? null });
+      if (newInserts.length > 0) await supabase.from('cash_movements').insert(newInserts);
+
       refetchLogs();
       showToast('Nota Guardada', `Folio #${newRepair.id} asignado correctamente.`, 'success');
     } else {
+      const { data: oldData } = await supabase
+        .from('repair_orders')
+        .select('advance_paid, abonos_paid')
+        .eq('id', Number(id))
+        .single();
+
       await syncRepairToDb(id, orderRef);
+
+      const oldAdvance = (oldData as { advance_paid: number } | null)?.advance_paid ?? 0;
+      const oldAbonos = (oldData as { abonos_paid: number } | null)?.abonos_paid ?? 0;
+      const advDelta = orderRef.advancePaid - oldAdvance;
+      const aboDelta = orderRef.abonosPaid - oldAbonos;
+
+      if (advDelta > 0 || aboDelta > 0) {
+        const { data: { user: u2 } } = await supabase.auth.getUser();
+        const updates: { type: 'in'; amount: number; note: string; created_by: string | null }[] = [];
+        if (advDelta > 0) updates.push({ type: 'in', amount: advDelta, note: `Anticipo Reparación #${id}`, created_by: u2?.id ?? null });
+        if (aboDelta > 0) updates.push({ type: 'in', amount: aboDelta, note: `Abono Reparación #${id}`, created_by: u2?.id ?? null });
+        await supabase.from('cash_movements').insert(updates);
+      }
+
       refetchLogs();
       showToast('Nota Actualizada', `Orden #${orderRef.id} guardada correctamente.`, 'success');
     }
@@ -289,5 +316,6 @@ export function useRepairEditor(
     handleJumpToRepair,
     handleDeleteCompletedRepairs,
     handleClearRepairForm,
+    refetchRepairs,
   };
 }

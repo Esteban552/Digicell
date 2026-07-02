@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Session } from '@supabase/supabase-js';
+import type { POSTicketData } from './types';
 
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -15,6 +16,7 @@ import RepairsView from './components/RepairsView';
 import ReportsView from './components/ReportsView';
 import SettingsView from './components/SettingsView';
 import ArqueoCaja from './components/ArqueoCaja';
+import POSTicketPrintModal from './components/POSTicketPrintModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import Toast from './components/Toast';
 
@@ -103,13 +105,13 @@ export default function App() {
 
   // Data hooks
   const { data: logs, loading: logsLoading, error: logsError, refetch: refetchLogs } = useActivityLogs();
-  const { data: cashMovements, loading: cashLoading, error: cashError, add: addCashMovement } = useCashMovements();
-  const { data: settings, loading: settingsLoading, error: settingsError, update: updateSetting } = useSettings();
+  const { data: cashMovements, loading: cashLoading, error: cashError, add: addCashMovement, refetch: refetchCashMovements } = useCashMovements();
+  const { data: settings, loading: settingsLoading, error: settingsError, update: updateSetting, refetch: refetchSettings } = useSettings();
   const { data: products, loading: productsLoading, error: productsError, refetch: refetchProducts } = useProducts();
   const [cart, setCart] = useState<CartItem[]>(INITIAL_CART);
 
   // Repair editor — manages all repair state and CRUD
-  const repairEditor = useRepairEditor(showToast, refetchLogs, setCurrentView);
+  const { refetchRepairs, ...repairEditor } = useRepairEditor(showToast, refetchLogs, setCurrentView);
 
   // Surface hook errors to user via toast
   useEffect(() => { if (repairEditor.repairsError) showToast('Error en reparaciones', repairEditor.repairsError, 'error'); }, [repairEditor.repairsError, showToast]);
@@ -120,6 +122,18 @@ export default function App() {
 
   const repairsLoading = repairEditor.repairsLoading;
   const startingFund = Number(settings.starting_fund) || 1000;
+
+  const prevSessionRef = useRef(session);
+  useEffect(() => {
+    if (!prevSessionRef.current && session) {
+      refetchProducts();
+      refetchLogs();
+      refetchCashMovements();
+      refetchSettings();
+      refetchRepairs();
+    }
+    prevSessionRef.current = session;
+  }, [session, refetchProducts, refetchLogs, refetchCashMovements, refetchSettings, refetchRepairs]);
 
   const [dataReady, setDataReady] = useState(false);
 
@@ -133,6 +147,8 @@ export default function App() {
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [serviciosModalOpen, setServiciosModalOpen] = useState(false);
   const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [posTicketData, setPosTicketData] = useState<POSTicketData | null>(null);
+  const [posTicketOpen, setPosTicketOpen] = useState(false);
 
   // Global Keyboard listener shortcuts
   useEffect(() => {
@@ -162,11 +178,12 @@ export default function App() {
   };
 
   // Complete point-of-sale transaction
-  const handleCompletePOSCheckout = async (cash: number, card: number, usd: number) => {
+  const handleCompletePOSCheckout = async (cash: number, card: number, usd: number, discount: number = 0) => {
     const subtotalCost = cart.reduce((acc, c) => acc + (c.price * c.qty), 0);
     const taxPct = settings.tax_rate !== undefined ? parseFloat(settings.tax_rate) : 16;
-    const taxCharge = subtotalCost * (taxPct / 100);
-    const totalCost = subtotalCost + taxCharge;
+    const taxableAmount = Math.max(0, subtotalCost - discount);
+    const taxCharge = taxableAmount * (taxPct / 100);
+    const totalCost = taxableAmount + taxCharge;
 
     const itemsDesc = cart.map(c => `${c.qty}x ${c.name}`).join(', ');
     const description = itemsDesc.length > 55 ? itemsDesc.slice(0, 52) + '...' : itemsDesc;
@@ -179,6 +196,7 @@ export default function App() {
         card_amount: card,
         usd_amount: usd,
         subtotal: subtotalCost,
+        discount,
         tax: taxCharge,
         total: totalCost,
         created_by: userId,
@@ -214,6 +232,42 @@ export default function App() {
       await Promise.all(stockDeductions);
       showToast('Venta Exitosa', `Venta procesada correctamente por $${totalCost.toFixed(2)}.`, 'success');
     }
+
+    const exchangeRate = settings.exchange_rate !== undefined ? parseFloat(settings.exchange_rate) : 18.50;
+    const usdValue = usd * exchangeRate;
+    const change = (cash + card + usdValue) - totalCost;
+
+    // Record net cash retained from this sale
+    // Neto = Total - Tarjeta (USD + cambio se cancelan en la ecuación)
+    const netCash = totalCost - card;
+    if (netCash > 0) {
+      const { data: { user: u3 } } = await supabase.auth.getUser();
+      const desc = `${cart.length} item${cart.length === 1 ? '' : 's'} — Neto efectivo: $${netCash.toFixed(2)}${usd > 0 ? ` (USD ${usd.toFixed(2)} recibidos)` : ''}`;
+      await supabase.from('cash_movements').insert({
+        type: 'in',
+        amount: netCash,
+        note: desc.slice(0, 150),
+        created_by: u3?.id ?? null,
+      });
+    }
+
+    setPosTicketData({
+      saleId: sale.id,
+      createdAt: sale.created_at,
+      items: cart.map(c => ({ name: c.name, qty: c.qty, price: c.price, total: c.price * c.qty })),
+      subtotal: subtotalCost,
+      discount,
+      tax: taxCharge,
+      taxRate: taxPct,
+      total: totalCost,
+      cashAmount: cash,
+      cardAmount: card,
+      usdAmount: usd,
+      usdExchangeRate: exchangeRate,
+      change,
+      attendant: userName,
+    });
+    setPosTicketOpen(true);
 
     setCart([]);
     refetchLogs();
@@ -356,6 +410,12 @@ export default function App() {
         </ErrorBoundary>
 
       </div>
+
+      <POSTicketPrintModal
+        open={posTicketOpen}
+        data={posTicketData}
+        onClose={() => setPosTicketOpen(false)}
+      />
 
       <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
 
