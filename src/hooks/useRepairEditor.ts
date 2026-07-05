@@ -3,6 +3,7 @@ import { RepairOrder, ActiveView } from '../types';
 import { supabase } from '../lib/supabase';
 import { validateRepair } from '../lib/repairValidation';
 import { useRepairOrders } from './useRepairOrders';
+import { getBusinessInfo } from '../lib/businessInfo';
 import type { ToastMessage } from './useToast';
 
 const DRAFT_ID = 'draft';
@@ -20,7 +21,7 @@ function blankRepair(): RepairOrder {
     technician: 'Unassigned', deliveryDate: today,
     warrantyEnd: new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0],
     totalCost: 0, advancePaid: 0, abonosPaid: 0, remainingBalance: 0,
-    footnote: 'Garantía de 30 días en piezas reemplazadas. No nos hacemos responsables por equipos olvidados después de 60 días.',
+    footnote: getBusinessInfo().warrantyText,
     createdAt: new Date().toISOString(),
   };
 }
@@ -29,6 +30,7 @@ export function useRepairEditor(
   showToast: (title: string, desc: string, type?: ToastMessage['type']) => void,
   refetchLogs: () => void,
   onNavigate: (view: ActiveView) => void,
+  confirm?: (opts: { title: string; message: string; confirmLabel?: string; cancelLabel?: string; danger?: boolean }) => Promise<boolean>,
 ) {
   const {
     data: dbRepairs,
@@ -219,20 +221,22 @@ export function useRepairEditor(
       showToast('Borrador descartado', 'La nota nueva se ha descartado.', 'info');
       return;
     }
-    if (confirm(`¿Seguro que deseas eliminar permanentemente el folio #${selectedRepairId}?`)) {
-      setIsSaving(true);
-      await removeRepairFromDb(selectedRepairId);
-      setRepairs(prev => prev.filter(r => r.id !== selectedRepairId));
-      refetchLogs();
-      showToast('Registro eliminado', `Se descartó el folio #${selectedRepairId} del registro.`, 'error');
-      setIsSaving(false);
+    const ok = confirm
+      ? await confirm({ title: 'Eliminar Orden', message: `¿Seguro que deseas eliminar permanentemente el folio #${selectedRepairId}?`, confirmLabel: 'Eliminar', danger: true })
+      : window.confirm(`¿Seguro que deseas eliminar permanentemente el folio #${selectedRepairId}?`);
+    if (!ok) return;
+    setIsSaving(true);
+    await removeRepairFromDb(selectedRepairId);
+    setRepairs(prev => prev.filter(r => r.id !== selectedRepairId));
+    refetchLogs();
+    showToast('Registro eliminado', `Se descartó el folio #${selectedRepairId} del registro.`, 'error');
+    setIsSaving(false);
 
-      const remaining = repairs.filter(r => r.id !== selectedRepairId);
-      if (remaining.length > 0) {
-        setSelectedRepairId(remaining[0].id);
-      } else {
-        handleCreateNewRepair();
-      }
+    const remaining = repairs.filter(r => r.id !== selectedRepairId);
+    if (remaining.length > 0) {
+      setSelectedRepairId(remaining[0].id);
+    } else {
+      handleCreateNewRepair();
     }
   }, [selectedRepairId, repairs, showToast, refetchLogs, removeRepairFromDb, handleCreateNewRepair]);
 

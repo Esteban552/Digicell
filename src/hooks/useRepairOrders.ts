@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import type { RepairOrder as DBRepairOrder } from '../lib/supabase-types';
 import type { RepairOrder } from '../types';
 import { dbToComponent, componentToDb } from '../lib/repairTransform';
+import { getBusinessInfo } from '../lib/businessInfo';
 
 type DBWritable = Omit<DBRepairOrder, 'id' | 'remaining_balance' | 'created_at' | 'created_by' | 'updated_at'>;
 
@@ -32,7 +33,7 @@ function defaults(): DBWritable {
     total_cost: 0,
     advance_paid: 0,
     abonos_paid: 0,
-    footnote: 'Garantía de 30 días en piezas reemplazadas. No nos hacemos responsables por equipos olvidados después de 60 días.',
+    footnote: getBusinessInfo().warrantyText,
   };
 }
 

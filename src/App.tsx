@@ -22,6 +22,7 @@ import Toast from './components/Toast';
 
 import { INITIAL_CART } from './data';
 import { supabase } from './lib/supabase';
+import { getBusinessInfo } from './lib/businessInfo';
 
 import { useCashMovements } from './hooks/useCashMovements';
 import { useActivityLogs } from './hooks/useActivityLogs';
@@ -29,6 +30,7 @@ import { useSettings } from './hooks/useSettings';
 import { useProducts } from './hooks/useProducts';
 import { useProfile } from './hooks/useProfile';
 import { useToast } from './hooks/useToast';
+import { useConfirm } from './hooks/useConfirm';
 import { useRepairEditor } from './hooks/useRepairEditor';
 import { useAppStats } from './hooks/useAppStats';
 import { ActiveView, CartItem, UserRole } from './types';
@@ -110,8 +112,11 @@ export default function App() {
   const { data: products, loading: productsLoading, error: productsError, refetch: refetchProducts } = useProducts();
   const [cart, setCart] = useState<CartItem[]>(INITIAL_CART);
 
+  // Confirm dialog hook
+  const { confirm, ConfirmModal } = useConfirm();
+
   // Repair editor — manages all repair state and CRUD
-  const { refetchRepairs, ...repairEditor } = useRepairEditor(showToast, refetchLogs, setCurrentView);
+  const { refetchRepairs, ...repairEditor } = useRepairEditor(showToast, refetchLogs, setCurrentView, confirm);
 
   // Surface hook errors to user via toast
   useEffect(() => { if (repairEditor.repairsError) showToast('Error en reparaciones', repairEditor.repairsError, 'error'); }, [repairEditor.repairsError, showToast]);
@@ -122,6 +127,7 @@ export default function App() {
 
   const repairsLoading = repairEditor.repairsLoading;
   const startingFund = Number(settings.starting_fund) || 1000;
+  const bizInfo = getBusinessInfo(settings);
 
   const prevSessionRef = useRef(session);
   useEffect(() => {
@@ -170,11 +176,16 @@ export default function App() {
   }, [repairEditor]);
 
   const handleLogout = async () => {
-    if (confirm('¿Seguro que deseas salir y cerrar sesión?')) {
-      await supabase.auth.signOut();
-      setCart([]);
-      showToast('Sesión Cerrada', 'Has desconectado de la terminal actual con éxito.', 'info');
-    }
+    const ok = await confirm({
+      title: 'Cerrar Sesión',
+      message: '¿Seguro que deseas salir y cerrar sesión?',
+      confirmLabel: 'Cerrar Sesión',
+      danger: true,
+    });
+    if (!ok) return;
+    await supabase.auth.signOut();
+    setCart([]);
+    showToast('Sesión Cerrada', 'Has desconectado de la terminal actual con éxito.', 'info');
   };
 
   // Complete point-of-sale transaction
@@ -219,19 +230,24 @@ export default function App() {
     );
 
     if (itemsErr) {
-      showToast('Error', 'Venta registrada pero fallaron los detalles.', 'error');
-    } else {
-      const stockDeductions = cart
-        .filter(c => c.productId)
-        .map(c => {
-          const product = products.find(p => p.id === c.productId);
-          if (!product) return Promise.resolve();
-          const newStock = Math.max(0, product.stock - c.qty);
-          return supabase.from('products').update({ stock: newStock }).eq('id', c.productId!);
-        });
-      await Promise.all(stockDeductions);
-      showToast('Venta Exitosa', `Venta procesada correctamente por $${totalCost.toFixed(2)}.`, 'success');
+      // Rollback: delete the sale so we don't leave orphan records
+      await supabase.from('sales').delete().eq('id', sale.id);
+      showToast('Error', 'No se pudieron registrar los productos. La venta fue cancelada.', 'error');
+      return;
     }
+
+    // Deduct stock for each product
+    const stockDeductions = cart
+      .filter(c => c.productId)
+      .map(c => {
+        const product = products.find(p => p.id === c.productId);
+        if (!product) return Promise.resolve();
+        const newStock = Math.max(0, product.stock - c.qty);
+        return supabase.from('products').update({ stock: newStock }).eq('id', c.productId!);
+      });
+    await Promise.all(stockDeductions);
+
+    showToast('Venta Exitosa', `Venta procesada correctamente por $${totalCost.toFixed(2)}.`, 'success');
 
     const exchangeRate = settings.exchange_rate !== undefined ? parseFloat(settings.exchange_rate) : 18.50;
     const usdValue = usd * exchangeRate;
@@ -415,8 +431,10 @@ export default function App() {
         open={posTicketOpen}
         data={posTicketData}
         onClose={() => setPosTicketOpen(false)}
+        businessInfo={bizInfo}
       />
 
+      <ConfirmModal />
       <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
 
     </div>

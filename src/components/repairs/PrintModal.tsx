@@ -1,5 +1,8 @@
-import { useCallback } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import type { RepairOrder } from '../../types';
+import { getBusinessInfo } from '../../lib/businessInfo';
+
+const BIZ = getBusinessInfo();
 
 interface PrintModalProps {
   open: boolean;
@@ -15,7 +18,10 @@ const statusLabels: Record<string, string> = {
   delivered: 'Entregado',
 };
 
-function receiptHTML(repair: RepairOrder, remaining: number) {
+function receiptHTML(repair: RepairOrder, remaining: number, info = BIZ) {
+  const dateStr = repair.createdAt
+    ? new Date(repair.createdAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Tijuana' })
+    : new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Tijuana' });
   const accs = [
     repair.chargerLeft && 'Cargador',
     repair.coverLeft && 'Funda',
@@ -63,15 +69,15 @@ function receiptHTML(repair: RepairOrder, remaining: number) {
 </head>
 <body>
 
-<div class="cnt s13 b">DIGICELL REPAIRS</div>
+<div class="cnt s13 b">${info.name}</div>
 <div class="cnt s9 dashed">
-  Ruta 88 1234, Adrogué<br>
-  Tel: (011) 5555-5555
+  ${info.address}<br>
+  Tel: ${info.phone}
 </div>
 
 <div class="s9 mb2">
   <span class="b">Folio:</span> #${repair.id}<br>
-  <span class="b">Ingreso:</span> ${new Date(repair.createdAt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}<br>
+  <span class="b">Ingreso:</span> ${dateStr}<br>
   <span class="b">Estado:</span> ${statusLabels[repair.status] || repair.status}<br>
   <span class="b">Técnico:</span> ${repair.technician || '—'}
 </div>
@@ -108,7 +114,7 @@ ${repair.deliveryDate ? `
 </div>` : ''}
 
 <div class="cnt s8 label dashed" style="margin-top:3mm">
-  ${repair.footnote || 'Garantía estándar de 30 días.'}
+  ${repair.footnote || info.warrantyText}
 </div>
 
 <div class="barcode">*${repair.id}*</div>
@@ -119,14 +125,50 @@ ${repair.deliveryDate ? `
 }
 
 export default function PrintModal({ open, repair, remainingCalculated, onClose }: PrintModalProps) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (iframeRef.current) {
+        iframeRef.current.remove();
+        iframeRef.current = null;
+      }
+    };
+  }, []);
+
   const handlePrint = useCallback(() => {
-    const w = window.open('', `ticket-${repair.id}`);
-    if (!w) return;
-    w.document.write(receiptHTML(repair, remainingCalculated));
-    w.document.close();
-    w.focus();
-    w.print();
-  }, [repair, remainingCalculated]);
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(iframe);
+    iframeRef.current = iframe;
+
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      iframe.remove();
+      iframeRef.current = null;
+      return;
+    }
+
+    iframeDoc.open();
+    iframeDoc.write(receiptHTML(repair, remainingCalculated, BIZ));
+    iframeDoc.close();
+
+    let didClose = false;
+    const closeOnce = () => {
+      if (didClose) return;
+      didClose = true;
+      if (document.body.contains(iframe)) iframe.remove();
+      iframeRef.current = null;
+      onClose();
+    };
+
+    iframe.contentWindow?.addEventListener('afterprint', closeOnce, { once: true });
+    setTimeout(closeOnce, 2000);
+
+    iframe.contentWindow?.focus();
+    iframe.contentWindow?.print();
+  }, [repair, remainingCalculated, onClose]);
 
   if (!open) return null;
 
@@ -145,14 +187,14 @@ export default function PrintModal({ open, repair, remainingCalculated, onClose 
             id="receipt-thermal"
             className="bg-white text-black w-[240px] p-4 font-mono text-[11px] leading-tight shadow-md border border-slate-300 select-none"
           >
-            <div className="text-center font-bold text-sm tracking-wide mb-1">DIGICELL REPAIRS</div>
+            <div className="text-center font-bold text-sm tracking-wide mb-1">{BIZ.name}</div>
             <div className="text-center text-[10px] mb-3 border-b border-dashed border-slate-400 pb-2">
-              Ruta 88 1234, Adrogué<br />Tel: (011) 5555-5555
+              {BIZ.address}<br />Tel: {BIZ.phone}
             </div>
 
             <div className="mb-2.5">
               <strong>Folio:</strong> #{repair.id}<br />
-              <strong>Ingreso:</strong> {new Date(repair.createdAt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}<br />
+              <strong>Ingreso:</strong> {new Date(repair.createdAt || Date.now()).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Tijuana' })}<br />
               <strong>Estado:</strong> {statusLabels[repair.status] || repair.status}<br />
               <strong>Técnico:</strong> {repair.technician || '—'}
             </div>
@@ -195,7 +237,7 @@ export default function PrintModal({ open, repair, remainingCalculated, onClose 
             </div>
 
             <div className="text-center text-[8px] leading-relaxed text-slate-500 mt-3 pt-2 border-t border-dashed border-slate-400">
-              {repair.footnote || 'Garantía estándar de 30 días.'}
+              {repair.footnote || BIZ.warrantyText}
             </div>
 
             <div className="text-center mt-4">

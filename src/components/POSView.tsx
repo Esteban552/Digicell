@@ -5,6 +5,7 @@ import InventoryPanel from './InventoryPanel';
 import DenominationPad from './DenominationPad';
 import { DENOMS, emptyCounts, calcTotal, calcChange } from '../lib/denominations';
 import type { DenomCounts } from '../lib/denominations';
+import { useConfirm } from '../hooks/useConfirm';
 
 function getCartQtyForProduct(cart: CartItem[], productId: number) {
   return cart
@@ -35,6 +36,7 @@ export default function POSView({
   exchangeRate,
   onRefetchProducts
 }: POSViewProps) {
+  const { confirm, ConfirmModal } = useConfirm();
   // Quick adder states
   const [itemName, setItemName] = useState('');
   const [itemQty, setItemQty] = useState(1);
@@ -203,14 +205,14 @@ export default function POSView({
   };
 
   // Clear current cart completely
-  const handleCancelSale = () => {
+  const handleCancelSale = async () => {
     if (cart.length === 0) return;
-    if (confirm('¿Seguro que deseas cancelar y vaciar la venta actual?')) {
-      onSetCart([]);
-      setDiscountPct(0);
-      setDiscountAmt(0);
-      showToast('Venta Cancelada', 'El carro ha sido regresado a cero.', 'error');
-    }
+    const ok = await confirm({ title: 'Cancelar Venta', message: '¿Seguro que deseas cancelar y vaciar la venta actual?', confirmLabel: 'Cancelar Venta', danger: true });
+    if (!ok) return;
+    onSetCart([]);
+    setDiscountPct(0);
+    setDiscountAmt(0);
+    showToast('Venta Cancelada', 'El carro ha sido regresado a cero.', 'error');
   };
 
   // Pay checkout triggers
@@ -281,7 +283,9 @@ export default function POSView({
   };
 
   return (
-    <div className="flex-1 flex flex-col gap-4 select-none h-full">
+    <>
+      <ConfirmModal />
+      <div className="flex-1 flex flex-col gap-4 select-none h-full">
       {/* Header Label */}
       <div className="flex items-start justify-between">
         <div>
@@ -731,6 +735,7 @@ export default function POSView({
         </div>
       )}
     </div>
+    </>
   );
 }
 

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import type { RepairOrder } from '../types';
+import { useConfirm } from '../hooks/useConfirm';
 
 const repairStatusLabels: Record<string, string> = {
   'in_review': 'En Revisión',
@@ -25,28 +26,31 @@ function formatDateTime(dateStr: string) {
     month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    timeZone: 'America/Tijuana'
   });
 }
 
 function todayStr() {
-  const d = new Date();
-  return d.getFullYear() + '-' +
-    String(d.getMonth() + 1).padStart(2, '0') + '-' +
-    String(d.getDate()).padStart(2, '0');
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Tijuana' });
+}
+
+function toTijuanaDate(isoStr: string): string {
+  return new Date(isoStr).toLocaleDateString('en-CA', { timeZone: 'America/Tijuana' });
 }
 
 export default function ServiciosModal({ open, onClose, repairs, onDeleteCompletedRepairs, onSelectRepair, isSaving }: ServiciosModalProps) {
+  const { confirm, ConfirmModal } = useConfirm();
   const [search, setSearch] = useState('');
   const [filterDate, setFilterDate] = useState(todayStr());
 
   const filtered = useMemo(() => {
     let list = repairs;
 
-    // Filter by selected date
+    // Filter by selected date (compare in America/Tijuana timezone)
     if (filterDate) {
       list = list.filter(r => {
-        const repDate = r.createdAt ? r.createdAt.slice(0, 10) : '';
+        const repDate = r.createdAt ? toTijuanaDate(r.createdAt) : '';
         return repDate === filterDate;
       });
     }
@@ -70,7 +74,9 @@ export default function ServiciosModal({ open, onClose, repairs, onDeleteComplet
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>
+    <>
+      <ConfirmModal />
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>
       <div
         className="bg-white rounded-xl border border-outline-variant shadow-xl w-[1000px] max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
@@ -216,9 +222,8 @@ export default function ServiciosModal({ open, onClose, repairs, onDeleteComplet
                       key={n}
                       disabled={isSaving}
                       onClick={async () => {
-                        if (confirm(`¿Eliminar las ${actual} órdenes entregadas más recientes? Esta acción no se puede deshacer.`)) {
-                          await onDeleteCompletedRepairs(actual);
-                        }
+                        const ok = await confirm({ title: 'Eliminar Entregadas', message: `¿Eliminar las ${actual} órdenes entregadas más recientes? Esta acción no se puede deshacer.`, confirmLabel: 'Eliminar', danger: true });
+                        if (ok) await onDeleteCompletedRepairs(actual);
                       }}
                       className="px-2.5 py-1 text-[10px] font-bold font-sans bg-error/10 text-error rounded hover:bg-error hover:text-white disabled:opacity-50 transition-all outline-none cursor-pointer disabled:cursor-not-allowed"
                     >
@@ -232,5 +237,6 @@ export default function ServiciosModal({ open, onClose, repairs, onDeleteComplet
         </div>
       </div>
     </div>
+    </>
   );
 }

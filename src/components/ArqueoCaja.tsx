@@ -9,10 +9,11 @@ interface ArqueoCajaProps {
 }
 
 function todayStr() {
-  const d = new Date();
-  return d.getFullYear() + '-' +
-    String(d.getMonth() + 1).padStart(2, '0') + '-' +
-    String(d.getDate()).padStart(2, '0');
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Tijuana' });
+}
+
+function toTijuanaDate(isoStr: string): string {
+  return new Date(isoStr).toLocaleDateString('en-CA', { timeZone: 'America/Tijuana' });
 }
 
 export default function ArqueoCaja({ movements, startingFund = 1000 }: ArqueoCajaProps) {
@@ -21,7 +22,7 @@ export default function ArqueoCaja({ movements, startingFund = 1000 }: ArqueoCaj
 
   const filteredMovements = useMemo(() => {
     if (!filterDate) return movements;
-    return movements.filter(m => m.createdAt?.startsWith(filterDate));
+    return movements.filter(m => m.createdAt ? toTijuanaDate(m.createdAt) === filterDate : false);
   }, [movements, filterDate]);
 
   const totals = useMemo(() => {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Product } from '../lib/supabase-types';
+import { useConfirm } from '../hooks/useConfirm';
 
 function sanitizeName(v: string) {
   return v.replace(/[<>"']/g, '');
@@ -13,6 +14,7 @@ interface InventoryPanelProps {
 }
 
 export default function InventoryPanel({ products, onRefetchProducts, showToast }: InventoryPanelProps) {
+  const { confirm, ConfirmModal } = useConfirm();
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('');
@@ -98,7 +100,8 @@ export default function InventoryPanel({ products, onRefetchProducts, showToast 
   };
 
   const handleDelete = async (id: number, productName: string) => {
-    if (!confirm(`¿Seguro que deseas eliminar "${productName}" del inventario?`)) return;
+    const ok = await confirm({ title: 'Eliminar Producto', message: `¿Seguro que deseas eliminar "${productName}" del inventario?`, confirmLabel: 'Eliminar', danger: true });
+    if (!ok) return;
     const { error } = await supabase.from('products').update({ active: false }).eq('id', id);
     if (error) {
       showToast('Error', 'No se pudo eliminar el producto.', 'error');
@@ -109,7 +112,9 @@ export default function InventoryPanel({ products, onRefetchProducts, showToast 
   };
 
   return (
-    <div className="flex flex-col gap-4 h-full">
+    <>
+      <ConfirmModal />
+      <div className="flex flex-col gap-4 h-full">
       {/* Add / Edit Form */}
       <form onSubmit={handleSubmit} className="bg-white border border-outline-variant rounded-md p-4 shadow-sm">
         <h3 className="text-sm font-bold font-sans text-on-surface mb-3">
@@ -252,5 +257,6 @@ export default function InventoryPanel({ products, onRefetchProducts, showToast 
         )}
       </div>
     </div>
+    </>
   );
 }

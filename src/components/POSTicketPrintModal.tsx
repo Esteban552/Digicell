@@ -1,13 +1,16 @@
-import { useCallback } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import type { POSTicketData } from '../types';
+import type { BusinessInfo } from '../lib/businessInfo';
+import { getBusinessInfo } from '../lib/businessInfo';
 
 interface POSTicketPrintModalProps {
   open: boolean;
   data: POSTicketData | null;
   onClose: () => void;
+  businessInfo?: BusinessInfo;
 }
 
-function receiptHTML(d: POSTicketData) {
+function receiptHTML(d: POSTicketData, info: BusinessInfo) {
   const itemsHTML = d.items.map(item => `
     <div class="row s9">
       <span>${item.qty}x ${item.name}</span>
@@ -26,6 +29,10 @@ function receiptHTML(d: POSTicketData) {
   if (d.cashAmount > 0) payments.push(`Efectivo: $${d.cashAmount.toFixed(2)}`);
   if (d.cardAmount > 0) payments.push(`Tarjeta: $${d.cardAmount.toFixed(2)}`);
   if (d.usdAmount > 0) payments.push(`USD $${d.usdAmount.toFixed(2)} (T.C. $${d.usdExchangeRate.toFixed(2)})`);
+
+  const dateStr = d.createdAt
+    ? new Date(d.createdAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Tijuana' })
+    : new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Tijuana' });
 
   return `<!DOCTYPE html>
 <html>
@@ -53,15 +60,15 @@ function receiptHTML(d: POSTicketData) {
 </style>
 </head>
 <body>
-<div class="cnt s13 b">DIGICELL</div>
+<div class="cnt s13 b">${info.name}</div>
 <div class="cnt s9 dashed">
-  Ruta 88 1234, Adrogué<br>
-  Tel: (011) 5555-5555
+  ${info.address}<br>
+  Tel: ${info.phone}
 </div>
 
 <div class="s9 mb2">
   <span class="b">Ticket #</span>${d.saleId}<br>
-  <span class="b">Fecha:</span> ${new Date(d.createdAt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}<br>
+  <span class="b">Fecha:</span> ${dateStr}<br>
   <span class="b">Atendió:</span> ${d.attendant}
 </div>
 
@@ -96,16 +103,60 @@ function receiptHTML(d: POSTicketData) {
 </html>`;
 }
 
-export default function POSTicketPrintModal({ open, data, onClose }: POSTicketPrintModalProps) {
+export default function POSTicketPrintModal({ open, data, onClose, businessInfo }: POSTicketPrintModalProps) {
+  const info = businessInfo ?? getBusinessInfo();
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  // Cleanup: remove iframe on unmount
+  useEffect(() => {
+    return () => {
+      if (iframeRef.current) {
+        iframeRef.current.remove();
+        iframeRef.current = null;
+      }
+    };
+  }, []);
+
   const handlePrint = useCallback(() => {
     if (!data) return;
-    const w = window.open('', `ticket-${data.saleId}`);
-    if (!w) return;
-    w.document.write(receiptHTML(data));
-    w.document.close();
-    w.focus();
-    w.print();
-  }, [data]);
+
+    // Use a hidden iframe for printing — avoids popup blockers
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(iframe);
+    iframeRef.current = iframe;
+
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      iframe.remove();
+      iframeRef.current = null;
+      return;
+    }
+
+    iframeDoc.open();
+    iframeDoc.write(receiptHTML(data, info));
+    iframeDoc.close();
+
+    // Track if we already closed to prevent double onClose
+    let didClose = false;
+    const closeOnce = () => {
+      if (didClose) return;
+      didClose = true;
+      if (document.body.contains(iframe)) iframe.remove();
+      iframeRef.current = null;
+      onClose();
+    };
+
+    // 'afterprint' is supported in most modern browsers
+    iframe.contentWindow?.addEventListener('afterprint', closeOnce, { once: true });
+
+    // Fallback: auto-close after 2s if afterprint doesn't fire
+    setTimeout(closeOnce, 2000);
+
+    iframe.contentWindow?.focus();
+    iframe.contentWindow?.print();
+  }, [data, info, onClose]);
 
   if (!open || !data) return null;
 
@@ -121,14 +172,14 @@ export default function POSTicketPrintModal({ open, data, onClose }: POSTicketPr
 
         <div className="p-6 bg-slate-100 flex justify-center items-center h-[350px] overflow-y-auto">
           <div className="bg-white text-black w-[240px] p-4 font-mono text-[11px] leading-tight shadow-md border border-slate-300 select-none">
-            <div className="text-center font-bold text-sm tracking-wide mb-1">DIGICELL</div>
+            <div className="text-center font-bold text-sm tracking-wide mb-1">{info.name}</div>
             <div className="text-center text-[10px] mb-3 border-b border-dashed border-slate-400 pb-2">
-              Ruta 88 1234, Adrogué<br />Tel: (011) 5555-5555
+              {info.address}<br />Tel: {info.phone}
             </div>
 
             <div className="mb-2.5">
               <strong>Ticket #</strong>{data.saleId}<br />
-              <strong>Fecha:</strong> {new Date(data.createdAt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}<br />
+              <strong>Fecha:</strong> {new Date(data.createdAt || Date.now()).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Tijuana' })}<br />
               <strong>Atendió:</strong> {data.attendant}
             </div>
 

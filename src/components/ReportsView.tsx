@@ -3,8 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { LogEntry, RepairOrder } from '../types';
+import { printHTML, receiptPage } from '../lib/printIframe';
+import { getBusinessInfo } from '../lib/businessInfo';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -46,15 +48,21 @@ export default function ReportsView({
   showToast
 }: ReportsViewProps) {
   const [filterQuery, setFilterQuery] = useState('');
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() =>
+    new Date().toLocaleDateString('en-CA', { timeZone: 'America/Tijuana' })
+  );
   const [activeFilter, setActiveFilter] = useState<TypeFilter>('all');
   const [currentPage, setCurrentPage] = useState(1);
 
   // Reset to page 1 when filters or date change
   useEffect(() => { setCurrentPage(1); }, [filterQuery, selectedDate, activeFilter]);
 
+  // Convert ISO timestamp to YYYY-MM-DD in America/Tijuana timezone
+  const toDateStr = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Tijuana' });
+
   const logIsOnDate = (log: LogEntry, date: string) =>
-    (log.created_at && log.created_at.startsWith(date)) || (log.time && log.time.startsWith(date));
+    (log.created_at && toDateStr(log.created_at) === date) || (log.time && log.time.startsWith(date));
 
   const dateFilteredLogs = useMemo(() =>
     logs.filter(l => logIsOnDate(l, selectedDate)),
@@ -62,7 +70,7 @@ export default function ReportsView({
   );
 
   const dateFilteredRepairs = useMemo(() =>
-    repairs.filter(r => r.createdAt.startsWith(selectedDate)),
+    repairs.filter(r => toDateStr(r.createdAt) === selectedDate),
     [repairs, selectedDate]
   );
 
@@ -104,6 +112,117 @@ export default function ReportsView({
     dateFilteredRepairs.forEach(r => { if (counts[r.status] !== undefined) counts[r.status]++; });
     return counts;
   }, [dateFilteredRepairs]);
+
+  const bizInfo = useMemo(() => getBusinessInfo(), []);
+
+  // ── Print helpers ─────────────────────────────────────────────
+
+  const typePrintLabels: Record<string, string> = {
+    'POS Sale': 'Venta POS',
+    'Repair Advance': 'Anticipo de Reparación',
+    'Cash Movement': 'Movimiento de Caja',
+    'Repair Payment': 'Pago de Reparación',
+  };
+
+  const statusPrintLabels: Record<string, string> = {
+    'Paid': 'Pagado',
+    'Advance': 'Anticipo',
+    'Outflow': 'Salida',
+  };
+
+  const buildCorteHTML = useCallback(() => {
+    const allLogs = dateFilteredLogs; // all logs for the selected date (ignoring activeFilter)
+    const entriesHTML = allLogs
+      .map(
+        (log) => `
+    <tr>
+      <td>${log.created_at ? new Date(log.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Tijuana' }) : log.time}</td>
+      <td>${typePrintLabels[log.type] || log.type}</td>
+      <td style="max-width:50mm;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${log.description}</td>
+      <td class="amt">${log.amount < 0 ? '' : '+'}$${log.amount.toFixed(2)}</td>
+      <td class="amt">${statusPrintLabels[log.status] || log.status}</td>
+    </tr>`,
+      )
+      .join('');
+
+    const flow = todayStats.sales + todayStats.advances + todayStats.payments + todayStats.cashIn - todayStats.cashOut;
+
+    const content = `
+<div class="cnt s11 b solid-bottom">CORTE DEL DÍA</div>
+<div class="s9 cnt" style="margin-bottom:3mm">
+  ${new Date(selectedDate).toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+</div>
+
+<div class="solid s10">
+  <div class="row"><span>Ventas POS</span><span>$${todayStats.sales.toFixed(2)}</span></div>
+  <div class="row"><span>Anticipos</span><span>$${todayStats.advances.toFixed(2)}</span></div>
+  <div class="row"><span>Pagos Reparación</span><span>$${todayStats.payments.toFixed(2)}</span></div>
+  <div class="row"><span>Entradas Caja</span><span>+$${todayStats.cashIn.toFixed(2)}</span></div>
+  <div class="row"><span>Salidas Caja</span><span>-$${todayStats.cashOut.toFixed(2)}</span></div>
+  <div class="solid" style="margin-top:1mm"></div>
+  <div class="row b s11"><span>FLUJO NETO</span><span>$${flow.toFixed(2)}</span></div>
+</div>
+
+<div class="solid s9" style="margin-top:3mm">
+  <div class="b s10" style="margin-bottom:1mm">Detalle de Transacciones</div>
+  <table>
+    <thead><tr><th>Hora</th><th>Tipo</th><th>Descripción</th><th class="amt">Monto</th><th class="amt">Estado</th></tr></thead>
+    <tbody>${entriesHTML}</tbody>
+  </table>
+</div>
+
+<div class="cnt s8 label dashed" style="margin-top:4mm">
+  Reporte generado el ${new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+</div>`;
+    printHTML(receiptPage(content, bizInfo));
+  }, [dateFilteredLogs, todayStats, selectedDate, bizInfo]);
+
+  const buildMovimientosHTML = useCallback(() => {
+    const movements = dateFilteredLogs.filter((l) => l.type === 'Cash Movement');
+    if (movements.length === 0) {
+      showToast('Sin datos', 'No hay movimientos de caja registrados para esta fecha.', 'info');
+      return;
+    }
+
+    const entriesHTML = movements
+      .map(
+        (log) => `
+    <tr>
+      <td>${log.created_at ? new Date(log.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Tijuana' }) : log.time}</td>
+      <td>${log.description}</td>
+      <td class="amt">${log.amount < 0 ? '' : '+'}$${log.amount.toFixed(2)}</td>
+    </tr>`,
+      )
+      .join('');
+
+    const cashIn = movements.filter((m) => m.amount > 0).reduce((a, c) => a + c.amount, 0);
+    const cashOut = movements.filter((m) => m.amount < 0).reduce((a, c) => a + Math.abs(c.amount), 0);
+
+    const content = `
+<div class="cnt s11 b solid-bottom">MOVIMIENTOS DE CAJA</div>
+<div class="s9 cnt" style="margin-bottom:3mm">
+  ${new Date(selectedDate).toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+</div>
+
+<div class="solid s9">
+  <div class="b s10" style="margin-bottom:1mm">Registro de Movimientos</div>
+  <table>
+    <thead><tr><th>Hora</th><th>Descripción</th><th class="amt">Monto</th></tr></thead>
+    <tbody>${entriesHTML}</tbody>
+  </table>
+</div>
+
+<div class="solid s10">
+  <div class="row"><span>Total Entradas</span><span>+$${cashIn.toFixed(2)}</span></div>
+  <div class="row"><span>Total Salidas</span><span>-$${cashOut.toFixed(2)}</span></div>
+  <div class="row b s11" style="margin-top:1mm"><span>BALANCE</span><span>$${(cashIn - cashOut).toFixed(2)}</span></div>
+</div>
+
+<div class="cnt s8 label dashed" style="margin-top:4mm">
+  Reporte generado el ${new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+</div>`;
+    printHTML(receiptPage(content, bizInfo));
+  }, [dateFilteredLogs, selectedDate, bizInfo, showToast]);
 
   return (
     <div className="flex-1 flex flex-col gap-6 font-sans select-none">
@@ -167,7 +286,7 @@ export default function ReportsView({
 
           <button
             type="button"
-            onClick={() => showToast('Ticket Corte', 'Se ha preparado la plantilla de flujo de caja para impresión.', 'info')}
+            onClick={buildMovimientosHTML}
             className="h-10 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-on-surface text-xs font-semibold rounded flex items-center gap-1.5 cursor-pointer outline-none transition-colors border-dashed"
           >
             <span className="material-symbols-outlined text-[16px]">print</span>
@@ -175,14 +294,14 @@ export default function ReportsView({
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => showToast('Imprimiendo Corte', `Se ha enviado a imprimir el informe de corte de caja para el día ${selectedDate}.`, 'success')}
-          className="h-10 px-4 bg-primary hover:bg-primary-container text-white text-xs font-bold rounded flex items-center gap-2 cursor-pointer shadow-md shadow-primary/20 hover:shadow-lg transition-all outline-none"
-        >
-          <span className="material-symbols-outlined text-[16px]">receipt_long</span>
-          Imprimir Corte del Día
-        </button>
+          <button
+            type="button"
+            onClick={buildCorteHTML}
+            className="h-10 px-4 bg-primary hover:bg-primary-container text-white text-xs font-bold rounded flex items-center gap-2 cursor-pointer shadow-md shadow-primary/20 hover:shadow-lg transition-all outline-none"
+          >
+            <span className="material-symbols-outlined text-[16px]">receipt_long</span>
+            Imprimir Corte del Día
+          </button>
       </section>
 
       {/* Bento Grid layout statistics */}
@@ -295,7 +414,7 @@ export default function ReportsView({
                   className="even:bg-slate-50/40 hover:bg-slate-100/30 transition-colors border-b border-slate-100 last:border-0"
                 >
                   <td className="p-3 font-mono font-medium text-on-surface-variant">
-                    {log.time && log.time.includes('T') ? log.time.split('T')[1].split('.')[0].slice(0, 5) : log.time}
+                    {log.created_at ? new Date(log.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Tijuana' }) : log.time}
                   </td>
                   <td className="p-3">
                     <span className="flex items-center gap-1.5 text-on-surface font-semibold text-[11px]">
