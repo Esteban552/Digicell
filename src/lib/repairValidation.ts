@@ -6,6 +6,7 @@ export interface RepairValidationInput {
   deliveryDate?: string;
   warrantyEnd?: string;
   problemReported?: string;
+  status?: string;
   totalCost: number;
   advancePaid: number;
   abonosPaid: number;
@@ -39,9 +40,6 @@ export function validateRepair(order: RepairValidationInput): string[] {
 
   if (!order.deliveryDate?.trim()) {
     errors.push('La fecha de entrega es obligatoria.');
-  } else {
-    const todayStr = new Date().toISOString().split('T')[0];
-    if (order.deliveryDate < todayStr) errors.push('La fecha de entrega no puede ser pasada.');
   }
 
   if (!order.warrantyEnd?.trim()) {
@@ -52,6 +50,13 @@ export function validateRepair(order: RepairValidationInput): string[] {
   }
 
   if (!order.problemReported?.trim()) errors.push('El detalle del problema es obligatorio.');
+
+  if (order.status === 'delivered') {
+    const remaining = Math.max(0, order.totalCost - order.advancePaid - order.abonosPaid);
+    if (remaining > 0) {
+      errors.push('El saldo pendiente debe ser $0 para entregar la orden.');
+    }
+  }
 
   return errors;
 }

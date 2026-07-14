@@ -14,13 +14,13 @@ interface FinancesSectionProps {
 export default function FinancesSection({
   repair,
   isDraft,
-  isDelivered,
   errors,
   remainingCalculated,
   onClearError,
   onSetError,
   onDirectUpdate,
 }: FinancesSectionProps) {
+  const financeLocked = repair.status === 'delivered';
   return (
     <div className="bg-white border border-outline-variant rounded-md p-5 select-none hover:shadow-sm transition-all shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
       <h3 className="text-sm font-bold text-on-surface border-b border-outline-variant/60 pb-3 mb-4 flex items-center gap-2">
@@ -35,12 +35,12 @@ export default function FinancesSection({
             <input
               type="number"
               min="0"
-              step="0.01"
+              step="any"
               placeholder="0.00"
-              readOnly={isDelivered}
+              readOnly={financeLocked}
               value={repair.totalCost === 0 ? '' : repair.totalCost}
               onChange={(e) => {
-                if (isDelivered) return;
+                if (financeLocked) return;
                 const costVal = Math.max(0, Number(e.target.value) || 0);
                 onDirectUpdate(repair.id, {
                   totalCost: costVal,
@@ -58,7 +58,7 @@ export default function FinancesSection({
           {errors.totalCost && <p className="text-[10px] font-sans text-error font-semibold">{errors.totalCost}</p>}
         </div>
 
-        <fieldset disabled={!isDraft} className="border-0 p-0 m-0 space-y-4">
+        <fieldset disabled={!isDraft || financeLocked} className="border-0 p-0 m-0 space-y-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-bold text-on-surface-variant font-sans">Anticipo ($)</label>
             <div className="relative">
@@ -66,7 +66,7 @@ export default function FinancesSection({
               <input
                 type="number"
                 min="0"
-                step="0.01"
+                step="any"
                 readOnly={!isDraft}
                 placeholder="0.00"
                 value={repair.advancePaid === 0 ? '' : repair.advancePaid}
@@ -88,15 +88,15 @@ export default function FinancesSection({
           <label className="text-[11px] font-bold text-on-surface-variant font-sans">Abonos ($)</label>
           <div className="relative">
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-sans text-on-surface-variant">$</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="0.00"
-              readOnly={isDelivered}
-              value={repair.abonosPaid === 0 ? '' : repair.abonosPaid}
+              <input
+                type="number"
+                min="0"
+                step="any"
+                placeholder="0.00"
+                readOnly={financeLocked}
+                value={repair.abonosPaid === 0 ? '' : repair.abonosPaid}
               onChange={(e) => {
-                if (isDelivered) return;
+                if (financeLocked) return;
                 const abVal = Math.max(0, Number(e.target.value) || 0);
                 const totalPaid = (repair.advancePaid || 0) + abVal;
                 onDirectUpdate(repair.id, {

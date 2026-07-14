@@ -1,6 +1,7 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback } from 'react';
 import type { RepairOrder } from '../../types';
 import { getBusinessInfo } from '../../lib/businessInfo';
+import { printHTML, repairReceiptHTML } from '../../lib/printIframe';
 
 const BIZ = getBusinessInfo();
 
@@ -18,156 +19,10 @@ const statusLabels: Record<string, string> = {
   delivered: 'Entregado',
 };
 
-function receiptHTML(repair: RepairOrder, remaining: number, info = BIZ) {
-  const dateStr = repair.createdAt
-    ? new Date(repair.createdAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Tijuana' })
-    : new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Tijuana' });
-  const accs = [
-    repair.chargerLeft && 'Cargador',
-    repair.coverLeft && 'Funda',
-  ].filter(Boolean).join(', ') || 'Ninguno';
-
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=80mm">
-<title>Comprobante #${repair.id}</title>
-<style>
-  @page { size: 80mm auto; margin: 0; }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: 'Courier New', 'Lucida Console', monospace;
-    font-size: 10pt;
-    width: 72mm;
-    margin: 3mm auto;
-    color: #000;
-    background: #fff;
-  }
-  .cnt { text-align: center; }
-  .b { font-weight: 700; }
-  .s8  { font-size: 8pt; }
-  .s9  { font-size: 9pt; }
-  .s11 { font-size: 11pt; }
-  .s13 { font-size: 13pt; }
-  .dashed { border-bottom: 1px dashed #000; padding-bottom: 2mm; margin-bottom: 2mm; }
-  .solid  { border-top: 1px solid #000; margin: 2mm 0; padding-top: 2mm; }
-  .row { display: flex; justify-content: space-between; }
-  .mt1 { margin-top: 1mm; }
-  .mt2 { margin-top: 2mm; }
-  .mt3 { margin-top: 3mm; }
-  .mb2 { margin-bottom: 2mm; }
-  .px1 { padding-left: 1mm; padding-right: 1mm; }
-  .barcode {
-    text-align: center; margin-top: 3mm;
-    font-family: 'Libre Barcode 39', 'IDAutomationHC39M', monospace;
-    font-size: 22pt; letter-spacing: 2px;
-  }
-  .label { color: #555; }
-</style>
-</head>
-<body>
-
-<div class="cnt s13 b">${info.name}</div>
-<div class="cnt s9 dashed">
-  ${info.address}<br>
-  Tel: ${info.phone}
-</div>
-
-<div class="s9 mb2">
-  <span class="b">Folio:</span> #${repair.id}<br>
-  <span class="b">Ingreso:</span> ${dateStr}<br>
-  <span class="b">Estado:</span> ${statusLabels[repair.status] || repair.status}<br>
-  <span class="b">Técnico:</span> ${repair.technician || '—'}
-</div>
-
-<div class="dashed s9">
-  <span class="b">Cliente:</span> ${repair.clientName || 'N/A'}<br>
-  <span class="b">Tel.:</span> ${repair.clientPhone || 'N/A'}<br>
-  ${repair.clientEmail ? `<span class="b">Email:</span> ${repair.clientEmail}<br>` : ''}
-  <span class="b">Equipo:</span> ${repair.deviceBrand} ${repair.deviceModel}<br>
-  <span class="b">Color:</span> ${repair.deviceColor || '—'}<br>
-  <span class="b">IMEI/SN:</span> ${repair.deviceSerial || '—'}<br>
-  <span class="b">PIN/Pass:</span> ${repair.devicePassword || '—'}<br>
-  <span class="b">Enciende:</span> ${repair.powersOn} / Batería: ${repair.batteryPercent || '—'}<br>
-  <span class="b">Condición:</span> ${repair.receivingCondition || '—'}<br>
-  <span class="b">Accesorios:</span> ${accs}<br>
-  <span class="b mt1" style="display:inline-block">Falla:</span> ${repair.problemReported || 'Mantenimiento'}
-</div>
-
-<div class="solid s9">
-  <div class="row"><span>Costo Est.:</span><span>$${repair.totalCost.toFixed(2)}</span></div>
-  <div class="row"><span>Anticipo:</span><span>$${repair.advancePaid.toFixed(2)}</span></div>
-  ${repair.abonosPaid > 0 ? `<div class="row"><span>Abonos:</span><span>$${repair.abonosPaid.toFixed(2)}</span></div>` : ''}
-</div>
-
-<div class="solid s11 b row">
-  <span>SALDO PENDIENTE:</span>
-  <span>$${remaining.toFixed(2)}</span>
-</div>
-
-${repair.deliveryDate ? `
-<div class="dashed s9 cnt mt2">
-  <span class="b">Entrega estimada:</span> ${new Date(repair.deliveryDate).toLocaleDateString('es-AR')}
-  ${repair.warrantyEnd ? `<br><span class="b">Garantía hasta:</span> ${new Date(repair.warrantyEnd).toLocaleDateString('es-AR')}` : ''}
-</div>` : ''}
-
-<div class="cnt s8 label dashed" style="margin-top:3mm">
-  ${repair.footnote || info.warrantyText}
-</div>
-
-<div class="barcode">*${repair.id}*</div>
-<div class="cnt s8 label" style="margin-top:-1mm">${repair.id}</div>
-
-</body>
-</html>`;
-}
-
 export default function PrintModal({ open, repair, remainingCalculated, onClose }: PrintModalProps) {
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (iframeRef.current) {
-        iframeRef.current.remove();
-        iframeRef.current = null;
-      }
-    };
-  }, []);
-
   const handlePrint = useCallback(() => {
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.setAttribute('aria-hidden', 'true');
-    document.body.appendChild(iframe);
-    iframeRef.current = iframe;
-
-    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!iframeDoc) {
-      iframe.remove();
-      iframeRef.current = null;
-      return;
-    }
-
-    iframeDoc.open();
-    iframeDoc.write(receiptHTML(repair, remainingCalculated, BIZ));
-    iframeDoc.close();
-
-    let didClose = false;
-    const closeOnce = () => {
-      if (didClose) return;
-      didClose = true;
-      if (document.body.contains(iframe)) iframe.remove();
-      iframeRef.current = null;
-      onClose();
-    };
-
-    iframe.contentWindow?.addEventListener('afterprint', closeOnce, { once: true });
-    setTimeout(closeOnce, 2000);
-
-    iframe.contentWindow?.focus();
-    iframe.contentWindow?.print();
+    const html = repairReceiptHTML(repair, remainingCalculated, BIZ);
+    printHTML(html, { onClose });
   }, [repair, remainingCalculated, onClose]);
 
   if (!open) return null;

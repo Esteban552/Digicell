@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { validateRepair } from '../lib/repairValidation';
 import { useRepairOrders } from './useRepairOrders';
 import { getBusinessInfo } from '../lib/businessInfo';
+import { printHTML, repairReceiptHTML } from '../lib/printIframe';
 import type { ToastMessage } from './useToast';
 
 const DRAFT_ID = 'draft';
@@ -29,6 +30,7 @@ function blankRepair(): RepairOrder {
 export function useRepairEditor(
   showToast: (title: string, desc: string, type?: ToastMessage['type']) => void,
   refetchLogs: () => void,
+  refetchCashMovements: () => void,
   onNavigate: (view: ActiveView) => void,
   confirm?: (opts: { title: string; message: string; confirmLabel?: string; cancelLabel?: string; danger?: boolean }) => Promise<boolean>,
 ) {
@@ -71,38 +73,28 @@ export function useRepairEditor(
     }
   }, []);
 
-  const handleSaveRepairOrder = useCallback(async (id: string) => {
+  const handleSaveRepairOrder = useCallback(async (id: string, extraPayment = 0): Promise<boolean> => {
     setIsSaving(true);
     try {
     let orderRef = id === DRAFT_ID ? draftRepair : repairs.find(r => r.id === id);
-    if (!orderRef) return;
+    if (!orderRef) return false;
 
-    if (orderRef.status === 'delivered') {
-      const thirtyDaysFromNow = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
-      if (id === DRAFT_ID) {
-        setDraftRepair(prev => ({ ...prev, warrantyEnd: thirtyDaysFromNow }));
-      } else {
-        setRepairs(prev => prev.map(r => r.id === id ? { ...r, warrantyEnd: thirtyDaysFromNow } : r));
-      }
-      orderRef = { ...orderRef, warrantyEnd: thirtyDaysFromNow };
-
+    if (extraPayment > 0) {
       const remaining = Math.max(0, orderRef.totalCost - orderRef.advancePaid - orderRef.abonosPaid);
-      if (remaining > 0) {
-        const newAbonos = orderRef.abonosPaid + remaining;
-        if (id === DRAFT_ID) {
-          setDraftRepair(prev => ({ ...prev, abonosPaid: newAbonos }));
-        } else {
-          setRepairs(prev => prev.map(r => r.id === id ? { ...r, abonosPaid: newAbonos } : r));
-        }
-        orderRef = { ...orderRef, abonosPaid: newAbonos };
-      }
+      const addToAbonos = Math.min(extraPayment, remaining);
+      orderRef = { ...orderRef, abonosPaid: orderRef.abonosPaid + addToAbonos, remainingBalance: 0 };
+    }
+
+    if (orderRef.status === 'delivered' && !orderRef.warrantyEnd) {
+      const thirtyDaysFromNow = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+      orderRef = { ...orderRef, warrantyEnd: thirtyDaysFromNow };
     }
 
     const errors = validateRepair(orderRef);
 
     if (errors.length > 0) {
       showToast('Corregí los errores', errors.join(' '), 'error');
-      return;
+      return false;
     }
 
     if (id === DRAFT_ID) {
@@ -123,14 +115,14 @@ export function useRepairEditor(
         receiving_condition: draftRepair.receivingCondition,
         problem_reported: draftRepair.problemReported,
         internal_notes: draftRepair.internalNotes,
-        status: draftRepair.status,
-        technician: draftRepair.technician,
-        delivery_date: draftRepair.deliveryDate,
+        status: orderRef.status,
+        technician: orderRef.technician,
+        delivery_date: orderRef.deliveryDate,
         warranty_end: orderRef.warrantyEnd,
-        total_cost: draftRepair.totalCost,
-        advance_paid: draftRepair.advancePaid,
-        abonos_paid: draftRepair.abonosPaid,
-        footnote: draftRepair.footnote,
+        total_cost: orderRef.totalCost,
+        advance_paid: orderRef.advancePaid,
+        abonos_paid: orderRef.abonosPaid,
+        footnote: orderRef.footnote,
         created_by: user?.id ?? null,
       };
       const { data: row, error: err } = await supabase
@@ -141,35 +133,35 @@ export function useRepairEditor(
 
       if (err || !row) {
         showToast('Error', 'No se pudo guardar la orden.', 'error');
-        return;
+        return false;
       }
 
       const newRepair: RepairOrder = {
         id: String(row.id),
-        clientName: draftRepair.clientName,
-        clientPhone: draftRepair.clientPhone,
-        clientEmail: draftRepair.clientEmail,
-        deviceBrand: draftRepair.deviceBrand,
-        deviceModel: draftRepair.deviceModel,
-        deviceSerial: draftRepair.deviceSerial,
-        devicePassword: draftRepair.devicePassword,
-        deviceColor: draftRepair.deviceColor,
-        powersOn: draftRepair.powersOn,
-        batteryPercent: draftRepair.batteryPercent,
-        chargerLeft: draftRepair.chargerLeft,
-        coverLeft: draftRepair.coverLeft,
-        receivingCondition: draftRepair.receivingCondition,
-        problemReported: draftRepair.problemReported,
-        internalNotes: draftRepair.internalNotes,
-        status: draftRepair.status,
-        technician: draftRepair.technician,
-        deliveryDate: draftRepair.deliveryDate,
-        warrantyEnd: draftRepair.warrantyEnd,
-        totalCost: draftRepair.totalCost,
-        advancePaid: draftRepair.advancePaid,
-        abonosPaid: draftRepair.abonosPaid,
-        remainingBalance: Math.max(0, draftRepair.totalCost - draftRepair.advancePaid - draftRepair.abonosPaid),
-        footnote: draftRepair.footnote,
+        clientName: orderRef.clientName,
+        clientPhone: orderRef.clientPhone,
+        clientEmail: orderRef.clientEmail,
+        deviceBrand: orderRef.deviceBrand,
+        deviceModel: orderRef.deviceModel,
+        deviceSerial: orderRef.deviceSerial,
+        devicePassword: orderRef.devicePassword,
+        deviceColor: orderRef.deviceColor,
+        powersOn: orderRef.powersOn,
+        batteryPercent: orderRef.batteryPercent,
+        chargerLeft: orderRef.chargerLeft,
+        coverLeft: orderRef.coverLeft,
+        receivingCondition: orderRef.receivingCondition,
+        problemReported: orderRef.problemReported,
+        internalNotes: orderRef.internalNotes,
+        status: orderRef.status,
+        technician: orderRef.technician,
+        deliveryDate: orderRef.deliveryDate,
+        warrantyEnd: orderRef.warrantyEnd,
+        totalCost: orderRef.totalCost,
+        advancePaid: orderRef.advancePaid,
+        abonosPaid: orderRef.abonosPaid,
+        remainingBalance: orderRef.remainingBalance,
+        footnote: orderRef.footnote,
         createdAt: row.created_at,
       };
 
@@ -180,10 +172,15 @@ export function useRepairEditor(
       const newInserts: { type: 'in'; amount: number; note: string; created_by: string | null }[] = [];
       if (orderRef.advancePaid > 0) newInserts.push({ type: 'in', amount: orderRef.advancePaid, note: `Anticipo Reparación #${newRepair.id}`, created_by: u1?.id ?? null });
       if (orderRef.abonosPaid > 0) newInserts.push({ type: 'in', amount: orderRef.abonosPaid, note: `Abono Reparación #${newRepair.id}`, created_by: u1?.id ?? null });
-      if (newInserts.length > 0) await supabase.from('cash_movements').insert(newInserts);
+      if (newInserts.length > 0) {
+        const { error: insertErr } = await supabase.from('cash_movements').insert(newInserts);
+        if (insertErr) console.error('Error insertando movimientos:', insertErr);
+      }
 
       refetchLogs();
+      refetchCashMovements();
       showToast('Nota Guardada', `Folio #${newRepair.id} asignado correctamente.`, 'success');
+      return true;
     } else {
       const { data: oldData } = await supabase
         .from('repair_orders')
@@ -203,16 +200,19 @@ export function useRepairEditor(
         const updates: { type: 'in'; amount: number; note: string; created_by: string | null }[] = [];
         if (advDelta > 0) updates.push({ type: 'in', amount: advDelta, note: `Anticipo Reparación #${id}`, created_by: u2?.id ?? null });
         if (aboDelta > 0) updates.push({ type: 'in', amount: aboDelta, note: `Abono Reparación #${id}`, created_by: u2?.id ?? null });
-        await supabase.from('cash_movements').insert(updates);
+        const { error: insertErr } = await supabase.from('cash_movements').insert(updates);
+        if (insertErr) console.error('Error insertando movimientos:', insertErr);
       }
 
       refetchLogs();
+      refetchCashMovements();
       showToast('Nota Actualizada', `Orden #${orderRef.id} guardada correctamente.`, 'success');
+      return true;
     }
     } finally {
       setIsSaving(false);
     }
-  }, [draftRepair, repairs, showToast, refetchLogs, syncRepairToDb]);
+  }, [draftRepair, repairs, showToast, refetchLogs, refetchCashMovements, syncRepairToDb]);
 
   const handleDeleteCurrentRepair = useCallback(async () => {
     if (selectedRepairId === DRAFT_ID) {
@@ -229,6 +229,7 @@ export function useRepairEditor(
     await removeRepairFromDb(selectedRepairId);
     setRepairs(prev => prev.filter(r => r.id !== selectedRepairId));
     refetchLogs();
+    refetchCashMovements();
     showToast('Registro eliminado', `Se descartó el folio #${selectedRepairId} del registro.`, 'error');
     setIsSaving(false);
 
@@ -238,11 +239,25 @@ export function useRepairEditor(
     } else {
       handleCreateNewRepair();
     }
-  }, [selectedRepairId, repairs, showToast, refetchLogs, removeRepairFromDb, handleCreateNewRepair]);
+  }, [selectedRepairId, repairs, showToast, refetchLogs, refetchCashMovements, removeRepairFromDb, handleCreateNewRepair]);
 
   const handleReprintCurrentRepair = useCallback(() => {
-    showToast('Reimprimir Comprobante', `Generando ticket de carga térmica para folio #${selectedRepairId}...`, 'info');
-  }, [selectedRepairId, showToast]);
+    const id = selectedRepairId;
+    if (!id) {
+      showToast('Sin selección', 'No hay ninguna orden seleccionada.', 'error');
+      return;
+    }
+    const order = id === DRAFT_ID ? draftRepair : repairs.find(r => r.id === id);
+    if (!order) {
+      showToast('No encontrada', `No se encontró la orden #${id}.`, 'error');
+      return;
+    }
+    const remaining = Math.max(0, order.totalCost - order.advancePaid - order.abonosPaid);
+    const bizInfo = getBusinessInfo();
+    const html = repairReceiptHTML(order, remaining, bizInfo);
+    printHTML(html);
+    showToast('Reimprimiendo', `Enviando comprobante #${id} a la impresora...`, 'success');
+  }, [selectedRepairId, draftRepair, repairs, showToast]);
 
   const handleJumpToRepair = useCallback((folioNumber: number) => {
     let target: RepairOrder | undefined;

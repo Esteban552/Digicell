@@ -1,7 +1,8 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback } from 'react';
 import type { POSTicketData } from '../types';
 import type { BusinessInfo } from '../lib/businessInfo';
 import { getBusinessInfo } from '../lib/businessInfo';
+import { printHTML, receiptHTML } from '../lib/printIframe';
 
 interface POSTicketPrintModalProps {
   open: boolean;
@@ -10,152 +11,12 @@ interface POSTicketPrintModalProps {
   businessInfo?: BusinessInfo;
 }
 
-function receiptHTML(d: POSTicketData, info: BusinessInfo) {
-  const itemsHTML = d.items.map(item => `
-    <div class="row s9">
-      <span>${item.qty}x ${item.name}</span>
-      <span>$${item.total.toFixed(2)}</span>
-    </div>
-  `).join('');
-
-  const discountLine = d.discount > 0 ? `
-    <div class="row s9" style="color:#c00">
-      <span>Descuento</span>
-      <span>-$${d.discount.toFixed(2)}</span>
-    </div>
-  ` : '';
-
-  const payments: string[] = [];
-  if (d.cashAmount > 0) payments.push(`Efectivo: $${d.cashAmount.toFixed(2)}`);
-  if (d.cardAmount > 0) payments.push(`Tarjeta: $${d.cardAmount.toFixed(2)}`);
-  if (d.usdAmount > 0) payments.push(`USD $${d.usdAmount.toFixed(2)} (T.C. $${d.usdExchangeRate.toFixed(2)})`);
-
-  const dateStr = d.createdAt
-    ? new Date(d.createdAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Tijuana' })
-    : new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Tijuana' });
-
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=80mm">
-<title>Ticket #${d.saleId}</title>
-<style>
-  @page { size: 80mm auto; margin: 0; }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: 'Courier New', 'Lucida Console', monospace;
-    font-size: 10pt; width: 72mm; margin: 3mm auto; color: #000; background: #fff;
-  }
-  .cnt { text-align: center; }
-  .b { font-weight: 700; }
-  .s8  { font-size: 8pt; }
-  .s9  { font-size: 9pt; }
-  .s11 { font-size: 11pt; }
-  .s13 { font-size: 13pt; }
-  .dashed { border-bottom: 1px dashed #000; padding-bottom: 2mm; margin-bottom: 2mm; }
-  .solid  { border-top: 1px solid #000; margin: 2mm 0; padding-top: 2mm; }
-  .row { display: flex; justify-content: space-between; }
-  .label { color: #555; }
-</style>
-</head>
-<body>
-<div class="cnt s13 b">${info.name}</div>
-<div class="cnt s9 dashed">
-  ${info.address}<br>
-  Tel: ${info.phone}
-</div>
-
-<div class="s9 mb2">
-  <span class="b">Ticket #</span>${d.saleId}<br>
-  <span class="b">Fecha:</span> ${dateStr}<br>
-  <span class="b">Atendió:</span> ${d.attendant}
-</div>
-
-<div class="solid s9">
-  ${itemsHTML}
-</div>
-
-<div class="solid s9">
-  <div class="row"><span>Subtotal</span><span>$${d.subtotal.toFixed(2)}</span></div>
-  ${discountLine}
-  <div class="row"><span>IVA (${d.taxRate}%)</span><span>$${d.tax.toFixed(2)}</span></div>
-</div>
-
-<div class="solid s11 b row">
-  <span>TOTAL</span>
-  <span>$${d.total.toFixed(2)}</span>
-</div>
-
-<div class="solid s9">
-  ${payments.map(p => `<div class="row"><span>${p}</span></div>`).join('')}
-  <div class="row b s11" style="margin-top:1mm">
-    <span>Cambio</span>
-    <span>$${d.change.toFixed(2)}</span>
-  </div>
-</div>
-
-<div class="cnt s8 label dashed" style="margin-top:3mm">
-  ¡Gracias por su compra!
-</div>
-
-</body>
-</html>`;
-}
-
 export default function POSTicketPrintModal({ open, data, onClose, businessInfo }: POSTicketPrintModalProps) {
   const info = businessInfo ?? getBusinessInfo();
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
-
-  // Cleanup: remove iframe on unmount
-  useEffect(() => {
-    return () => {
-      if (iframeRef.current) {
-        iframeRef.current.remove();
-        iframeRef.current = null;
-      }
-    };
-  }, []);
 
   const handlePrint = useCallback(() => {
     if (!data) return;
-
-    // Use a hidden iframe for printing — avoids popup blockers
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.setAttribute('aria-hidden', 'true');
-    document.body.appendChild(iframe);
-    iframeRef.current = iframe;
-
-    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!iframeDoc) {
-      iframe.remove();
-      iframeRef.current = null;
-      return;
-    }
-
-    iframeDoc.open();
-    iframeDoc.write(receiptHTML(data, info));
-    iframeDoc.close();
-
-    // Track if we already closed to prevent double onClose
-    let didClose = false;
-    const closeOnce = () => {
-      if (didClose) return;
-      didClose = true;
-      if (document.body.contains(iframe)) iframe.remove();
-      iframeRef.current = null;
-      onClose();
-    };
-
-    // 'afterprint' is supported in most modern browsers
-    iframe.contentWindow?.addEventListener('afterprint', closeOnce, { once: true });
-
-    // Fallback: auto-close after 2s if afterprint doesn't fire
-    setTimeout(closeOnce, 2000);
-
-    iframe.contentWindow?.focus();
-    iframe.contentWindow?.print();
+    printHTML(receiptHTML(data, info), { onClose });
   }, [data, info, onClose]);
 
   if (!open || !data) return null;

@@ -5,7 +5,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import type { POSTicketData } from './types';
 
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -16,9 +15,9 @@ import RepairsView from './components/RepairsView';
 import ReportsView from './components/ReportsView';
 import SettingsView from './components/SettingsView';
 import ArqueoCaja from './components/ArqueoCaja';
-import POSTicketPrintModal from './components/POSTicketPrintModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import Toast from './components/Toast';
+import { printHTML, receiptHTML } from './lib/printIframe';
 
 import { INITIAL_CART } from './data';
 import { supabase } from './lib/supabase';
@@ -33,6 +32,7 @@ import { useToast } from './hooks/useToast';
 import { useConfirm } from './hooks/useConfirm';
 import { useRepairEditor } from './hooks/useRepairEditor';
 import { useAppStats } from './hooks/useAppStats';
+import { useArqueos } from './hooks/useArqueos';
 import { ActiveView, CartItem, UserRole } from './types';
 
 const VIEWS_BY_ROLE: Record<UserRole, ActiveView[]> = {
@@ -44,6 +44,7 @@ export default function App() {
   // Supabase Auth session
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const initialViewSet = useRef(false);
 
   useEffect(() => {
     let settled = false;
@@ -70,8 +71,12 @@ export default function App() {
         }
       });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
+      // Only navigate on explicit sign-out. SIGNED_IN from tab reconnect does NOT reset view.
+      // TOKEN_REFRESHED (fires when tab regains focus) is completely ignored for navigation.
+      if (event === 'SIGNED_OUT') setCurrentView('login');
+      if (event === 'SIGNED_IN' && session) setCurrentView(prev => prev === 'login' ? 'dashboard' : prev);
     });
 
     return () => {
@@ -91,6 +96,8 @@ export default function App() {
 
   useEffect(() => {
     if (authLoading || profileLoading) return;
+    if (initialViewSet.current) return; // Only set view once on initial load
+    initialViewSet.current = true;
     setCurrentView(session ? 'dashboard' : 'login');
   }, [session, authLoading, profileLoading]);
 
@@ -110,13 +117,14 @@ export default function App() {
   const { data: cashMovements, loading: cashLoading, error: cashError, add: addCashMovement, refetch: refetchCashMovements } = useCashMovements();
   const { data: settings, loading: settingsLoading, error: settingsError, update: updateSetting, refetch: refetchSettings } = useSettings();
   const { data: products, loading: productsLoading, error: productsError, refetch: refetchProducts } = useProducts();
+  const { historial: arqueoHistorial, loading: arqueosLoading, error: arqueosError, save: saveArqueo, refetch: refetchArqueos } = useArqueos();
   const [cart, setCart] = useState<CartItem[]>(INITIAL_CART);
 
   // Confirm dialog hook
   const { confirm, ConfirmModal } = useConfirm();
 
   // Repair editor — manages all repair state and CRUD
-  const { refetchRepairs, ...repairEditor } = useRepairEditor(showToast, refetchLogs, setCurrentView, confirm);
+  const { refetchRepairs, ...repairEditor } = useRepairEditor(showToast, refetchLogs, refetchCashMovements, setCurrentView, confirm);
 
   // Surface hook errors to user via toast
   useEffect(() => { if (repairEditor.repairsError) showToast('Error en reparaciones', repairEditor.repairsError, 'error'); }, [repairEditor.repairsError, showToast]);
@@ -124,6 +132,7 @@ export default function App() {
   useEffect(() => { if (cashError) showToast('Error en caja', cashError, 'error'); }, [cashError, showToast]);
   useEffect(() => { if (settingsError) showToast('Error en configuración', settingsError, 'error'); }, [settingsError, showToast]);
   useEffect(() => { if (productsError) showToast('Error en inventario', productsError, 'error'); }, [productsError, showToast]);
+  useEffect(() => { if (arqueosError) showToast('Error en arqueos', arqueosError, 'error'); }, [arqueosError, showToast]);
 
   const repairsLoading = repairEditor.repairsLoading;
   const startingFund = Number(settings.starting_fund) || 1000;
@@ -145,7 +154,7 @@ export default function App() {
 
   useEffect(() => {
     if (!session) { setDataReady(false); return; }
-    if (!logsLoading && !cashLoading && !settingsLoading && !productsLoading && !repairsLoading) {
+    if (!logsLoading && !cashLoading && !settingsLoading && !productsLoading && !repairsLoading && !arqueosLoading) {
       setDataReady(true);
     }
   }, [session, logsLoading, cashLoading, settingsLoading, productsLoading, repairsLoading]);
@@ -153,8 +162,6 @@ export default function App() {
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [serviciosModalOpen, setServiciosModalOpen] = useState(false);
   const [printModalOpen, setPrintModalOpen] = useState(false);
-  const [posTicketData, setPosTicketData] = useState<POSTicketData | null>(null);
-  const [posTicketOpen, setPosTicketOpen] = useState(false);
 
   // Global Keyboard listener shortcuts
   useEffect(() => {
@@ -172,7 +179,6 @@ export default function App() {
 
   const handleReprint = useCallback(() => {
     repairEditor.handleReprintCurrentRepair();
-    setPrintModalOpen(true);
   }, [repairEditor]);
 
   const handleLogout = async () => {
@@ -254,7 +260,7 @@ export default function App() {
     const change = (cash + card + usdValue) - totalCost;
 
     // Record net cash retained from this sale
-    // Neto = Total - Tarjeta (USD + cambio se cancelan en la ecuación)
+    // (used by ArqueoCaja — cash_movements entries appear in register audit)
     const netCash = totalCost - card;
     if (netCash > 0) {
       const { data: { user: u3 } } = await supabase.auth.getUser();
@@ -267,7 +273,7 @@ export default function App() {
       });
     }
 
-    setPosTicketData({
+    const ticketData = {
       saleId: sale.id,
       createdAt: sale.created_at,
       items: cart.map(c => ({ name: c.name, qty: c.qty, price: c.price, total: c.price * c.qty })),
@@ -282,11 +288,12 @@ export default function App() {
       usdExchangeRate: exchangeRate,
       change,
       attendant: userName,
-    });
-    setPosTicketOpen(true);
+    };
+    printHTML(receiptHTML(ticketData, bizInfo));
 
     setCart([]);
     refetchLogs();
+    refetchCashMovements();
     refetchProducts();
   };
 
@@ -397,6 +404,7 @@ export default function App() {
                 isSaving={repairEditor.isSaving}
                 printModalOpen={printModalOpen}
                 onSetPrintModalOpen={setPrintModalOpen}
+                onReprint={handleReprint}
               />
             )}
 
@@ -411,7 +419,13 @@ export default function App() {
             )}
 
             {currentView === 'arqueo' && (
-              <ArqueoCaja movements={cashMovements} startingFund={startingFund} />
+              <ArqueoCaja
+                movements={cashMovements}
+                startingFund={startingFund}
+                historial={arqueoHistorial}
+                onSave={saveArqueo}
+                onRefetchArqueos={refetchArqueos}
+              />
             )}
 
             {currentView === 'settings' && (
@@ -426,13 +440,6 @@ export default function App() {
         </ErrorBoundary>
 
       </div>
-
-      <POSTicketPrintModal
-        open={posTicketOpen}
-        data={posTicketData}
-        onClose={() => setPosTicketOpen(false)}
-        businessInfo={bizInfo}
-      />
 
       <ConfirmModal />
       <Toast message={toastMessage} onClose={() => setToastMessage(null)} />

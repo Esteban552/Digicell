@@ -10,12 +10,13 @@ import FinancesSection from './repairs/FinancesSection';
 import ActionsPanel from './repairs/ActionsPanel';
 import SearchModal from './repairs/SearchModal';
 import PrintModal from './repairs/PrintModal';
+import DeliveryPaymentModal from './repairs/DeliveryPaymentModal';
 
 interface RepairsViewProps {
   repairs: RepairOrder[];
   selectedId: string;
   onUpdateRepair: (id: string, updated: Partial<RepairOrder>) => void;
-  onSaveRepairOrder: (id: string) => void;
+  onSaveRepairOrder: (id: string, extraPayment?: number) => Promise<boolean>;
   showToast: (title: string, desc: string, type: 'success' | 'info' | 'error') => void;
   searchModalOpen: boolean;
   onSetSearchModalOpen: (open: boolean) => void;
@@ -28,15 +29,17 @@ interface RepairsViewProps {
   isSaving?: boolean;
   printModalOpen: boolean;
   onSetPrintModalOpen: (open: boolean) => void;
+  onReprint?: () => void;
 }
 
 export default function RepairsView({
   repairs, selectedId, onUpdateRepair, onSaveRepairOrder, showToast,
   searchModalOpen, onSetSearchModalOpen, serviciosModalOpen, onSetServiciosModalOpen,
   onDeleteCompletedRepairs, draftRepair, draftId, onSelectRepair, isSaving,
-  printModalOpen, onSetPrintModalOpen,
+  printModalOpen, onSetPrintModalOpen, onReprint,
 }: RepairsViewProps) {
   const [deliveryConfirmPending, setDeliveryConfirmPending] = useState(false);
+  const [deliveryPaymentOpen, setDeliveryPaymentOpen] = useState(false);
 
   useEffect(() => { setDeliveryConfirmPending(false); }, [selectedId]);
 
@@ -86,9 +89,41 @@ export default function RepairsView({
     showToast('WhatsApp Preparado', 'Chat abierto con plantilla de entrega.', 'success');
   };
 
-  const saveOrConfirm = async () => {
+  /**
+   * Saves the repair with an optional extra payment.
+   * NEVER opens the modal — that's handled by the caller.
+   */
+  const confirmOrPay = async (paymentAmount = 0) => {
+    const ok = await onSaveRepairOrder(activeRepair.id, paymentAmount);
+    if (ok && deliveryConfirmPending) {
+      setDeliveryConfirmPending(false);
+      if (onReprint) onReprint();
+    }
+  };
+
+  /** Handles the blue "Confirmar Entrega" button click. */
+  const handleConfirmDelivery = () => {
+    if (remainingCalculated > 0) {
+      setDeliveryPaymentOpen(true);
+      return;
+    }
+    // No remaining balance — save and deliver directly
+    confirmOrPay(0);
+  };
+
+  /** Called by DeliveryPaymentModal when user clicks "Cobrar y Entregar" / "Entregar". */
+  const handlePaymentConfirm = async (amount: number) => {
+    setDeliveryPaymentOpen(false);
+    await confirmOrPay(amount);
+  };
+
+  /** Handles the regular "Guardar Cambios" button click. */
+  const handleSaveOrConfirm = async () => {
+    if (activeRepair.status === 'delivered' && remainingCalculated > 0) {
+      setDeliveryPaymentOpen(true);
+      return;
+    }
     await onSaveRepairOrder(activeRepair.id);
-    if (deliveryConfirmPending) setDeliveryConfirmPending(false);
   };
 
   const sectionProps = {
@@ -141,8 +176,8 @@ export default function RepairsView({
             deliveryConfirmPending={deliveryConfirmPending}
             remainingCalculated={remainingCalculated}
             onUpdateField={handleUpdateField}
-            onSave={() => onSaveRepairOrder(activeRepair.id)}
-            onConfirmDelivery={saveOrConfirm}
+            onSave={handleSaveOrConfirm}
+            onConfirmDelivery={handleConfirmDelivery}
             isSaving={isSaving}
             onPrint={() => onSetPrintModalOpen(true)}
             onWhatsApp={triggerWhatsApp}
@@ -171,6 +206,14 @@ export default function RepairsView({
         onDeleteCompletedRepairs={onDeleteCompletedRepairs}
         onSelectRepair={onSelectRepair}
         isSaving={isSaving}
+      />
+
+      <DeliveryPaymentModal
+        open={deliveryPaymentOpen}
+        clientName={activeRepair.clientName || 'N/A'}
+        remaining={remainingCalculated}
+        onConfirm={handlePaymentConfirm}
+        onClose={() => setDeliveryPaymentOpen(false)}
       />
     </div>
   );

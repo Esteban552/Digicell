@@ -15,7 +15,7 @@ export default function ServiceDetailsSection({
         <span className="material-symbols-outlined text-primary text-[20px]">description</span>
         Detalles del Servicio
       </h3>
-      <fieldset disabled={!isDraft} className="border-0 p-0 m-0 min-w-0">
+      <fieldset disabled={!isDraft || isDelivered} className="border-0 p-0 m-0 min-w-0">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-bold text-on-surface-variant font-sans">Condiciones de Recepción</label>

@@ -7,6 +7,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { LogEntry, RepairOrder } from '../types';
 import { printHTML, receiptPage } from '../lib/printIframe';
 import { getBusinessInfo } from '../lib/businessInfo';
+import { useProfitAnalysis } from '../hooks/useProfitAnalysis';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -47,6 +48,7 @@ export default function ReportsView({
   totalAdvancesSum,
   showToast
 }: ReportsViewProps) {
+  const { data: profitData, loading: profitLoading } = useProfitAnalysis();
   const [filterQuery, setFilterQuery] = useState('');
   const [selectedDate, setSelectedDate] = useState(() =>
     new Date().toLocaleDateString('en-CA', { timeZone: 'America/Tijuana' })
@@ -145,7 +147,7 @@ export default function ReportsView({
       )
       .join('');
 
-    const flow = todayStats.sales + todayStats.advances + todayStats.payments + todayStats.cashIn - todayStats.cashOut;
+    const flow = todayStats.sales + todayStats.advances + todayStats.payments - todayStats.cashOut;
 
     const content = `
 <div class="cnt s11 b solid-bottom">CORTE DEL DÍA</div>
@@ -305,7 +307,7 @@ export default function ReportsView({
       </section>
 
       {/* Bento Grid layout statistics */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
 
         {/* Sales Stats Box */}
         <div className="bg-white border border-slate-200 rounded-lg p-6 relative overflow-hidden group hover:shadow-sm transition-all shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
@@ -347,12 +349,41 @@ export default function ReportsView({
           <h3 className="text-[11px] font-bold text-red-200 uppercase tracking-wider mb-2">Flujo del Día {selectedDate}</h3>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold font-sans text-[#ffffff]">
-              ${(todayStats.sales + todayStats.advances + todayStats.payments + todayStats.cashIn - todayStats.cashOut).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${(todayStats.sales + todayStats.advances + todayStats.payments - todayStats.cashOut).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
           <p className="text-xs font-sans text-red-300 mt-1 font-semibold">
             +${todayStats.cashIn.toFixed(2)} entró · -${todayStats.cashOut.toFixed(2)} salió
           </p>
+        </div>
+
+        {/* Profit Box */}
+        <div className="bg-emerald-950 text-white border border-transparent rounded-lg p-6 relative overflow-hidden group hover:shadow-md transition-all shadow-md">
+          <div className="absolute top-0 right-0 p-4 opacity-10 text-white">
+            <span className="material-symbols-outlined text-[68px] icon-fill">trending_up</span>
+          </div>
+          <h3 className="text-[11px] font-bold text-emerald-200 uppercase tracking-wider mb-2">Ganancias Estimadas</h3>
+          <div className="flex items-baseline gap-2">
+            {profitLoading ? (
+              <span className="animate-pulse text-lg font-bold font-sans text-emerald-200">Cargando...</span>
+            ) : profitData ? (
+              <>
+                <span className="text-2xl font-bold font-sans text-[#ffffff]">
+                  ${profitData.ganancia.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span className="text-xs font-bold text-emerald-300">
+                  {profitData.margen.toFixed(1)}%
+                </span>
+              </>
+            ) : (
+              <span className="text-sm font-bold font-sans text-emerald-300">Sin datos de costo</span>
+            )}
+          </div>
+          {profitData && (
+            <p className="text-xs font-sans text-emerald-300 mt-1 font-semibold">
+              ${profitData.ventaTotal.toFixed(0)} vendido · ${profitData.costoTotal.toFixed(0)} en costo · {profitData.ventasConCosto}/{profitData.totalVentas} ventas c/ costo
+            </p>
+          )}
         </div>
 
       </section>

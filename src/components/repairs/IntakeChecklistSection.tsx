@@ -3,13 +3,14 @@ import type { SectionProps } from './types';
 export default function IntakeChecklistSection({
   repair,
   isDraft,
+  isDelivered,
   errors,
   onUpdateField,
   onClearError,
   onSetError,
 }: SectionProps) {
   return (
-    <fieldset disabled={!isDraft} className="border-0 p-0 m-0 min-w-0">
+    <fieldset disabled={!isDraft || isDelivered} className="border-0 p-0 m-0 min-w-0">
       <div className="bg-white border border-outline-variant rounded-md p-5 select-none hover:shadow-sm transition-all shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
         <h3 className="text-sm font-bold text-on-surface border-b border-outline-variant/60 pb-3 mb-4 flex items-center gap-2">
           <span className="material-symbols-outlined text-primary text-[20px]">fact_check</span>

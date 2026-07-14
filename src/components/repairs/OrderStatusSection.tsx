@@ -52,7 +52,7 @@ export default function OrderStatusSection({
         <div className="flex flex-col gap-1.5">
           <label className="text-[11px] font-bold text-on-surface-variant font-sans">Técnico Asignado</label>
           <select
-            disabled={!isDraft}
+            disabled={!isDraft || isDelivered}
             value={repair.technician}
             onChange={(e) => onUpdateField('technician', e.target.value)}
             className="h-10 w-full px-2.5 border border-outline-variant rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs text-on-surface focus:border-tertiary outline-none cursor-pointer font-sans font-medium"
@@ -70,15 +70,13 @@ export default function OrderStatusSection({
           <input
             type="date"
             value={repair.deliveryDate}
-            readOnly={!isDraft}
-            min={today}
+            readOnly={!isDraft || isDelivered}
             onChange={(e) => {
               onUpdateField('deliveryDate', e.target.value);
               if (errors.deliveryDate) onClearError('deliveryDate');
             }}
             onBlur={() => {
               if (!repair.deliveryDate?.trim()) onSetError('deliveryDate', 'La fecha de entrega es obligatoria');
-              else if (repair.deliveryDate < today) onSetError('deliveryDate', 'No puede ser una fecha pasada');
               else onClearError('deliveryDate');
             }}
             className={`h-10 w-full px-3 border rounded disabled:bg-surface-container-low/40 disabled:cursor-default bg-white text-xs font-medium text-on-surface focus:border-tertiary outline-none font-sans ${errors.deliveryDate ? 'border-error' : 'border-outline-variant'}`}
@@ -93,7 +91,7 @@ export default function OrderStatusSection({
           <input
             type="date"
             value={repair.warrantyEnd}
-            readOnly={!isDraft}
+            readOnly={isDelivered}
             min={today}
             onChange={(e) => {
               onUpdateField('warrantyEnd', e.target.value);

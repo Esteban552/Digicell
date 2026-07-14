@@ -36,10 +36,18 @@ export interface Database {
         Insert: Setting;
         Update: Partial<Setting>;
       };
+      arqueos: {
+        Row: Arqueo;
+        Insert: Omit<Arqueo, 'id' | 'created_at'>;
+        Update: Partial<Omit<Arqueo, 'id'>>;
+      };
     };
     Views: {
       activity_logs: {
         Row: ActivityLogEntry;
+      };
+      profit_analysis: {
+        Row: ProfitEntry;
       };
     };
     Functions: {
@@ -102,6 +110,7 @@ export interface Product {
   category: string;
   stock: number;
   active: boolean;
+  cost: number;
   created_at: string;
   updated_at: string;
 }
@@ -150,5 +159,29 @@ export interface ActivityLogEntry {
   description: string;
   amount: number;
   status: string;
+  created_at: string;
+}
+
+export interface ProfitEntry {
+  sale_id: number;
+  fecha: string;
+  venta_total: number;
+  costo_total: number;
+  ganancia_estimada: number;
+}
+
+export interface Arqueo {
+  id: number;
+  fecha: string;
+  fondo_inicial: number;
+  total_entradas: number;
+  total_salidas: number;
+  total_esperado: number;
+  total_fisico: number;
+  diferencia: number;
+  denominaciones: Record<string, number>;
+  desglose: Record<string, number>;
+  notas: string;
+  created_by: string | null;
   created_at: string;
 }

@@ -72,9 +72,9 @@ export default function ActionsPanel({
             type="button"
             onClick={onConfirmDelivery}
             disabled={isSaving}
-            className="w-full bg-error hover:bg-error/90 disabled:opacity-50 text-white text-xs font-bold py-2.5 rounded transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer disabled:cursor-not-allowed outline-none animate-pulse"
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold py-2.5 rounded transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer disabled:cursor-not-allowed outline-none animate-pulse"
           >
-            <span className="material-symbols-outlined text-[16px]">warning</span>
+            <span className="material-symbols-outlined text-[16px]">handshake</span>
             Confirmar Entrega
           </button>
         ) : (

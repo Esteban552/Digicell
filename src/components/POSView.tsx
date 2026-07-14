@@ -530,7 +530,7 @@ export default function POSView({
                     placeholder="$"
                     className="w-16 h-7 border border-outline rounded px-1.5 text-center text-[11px] font-sans outline-none focus:border-tertiary"
                     min="0"
-                    step="0.01"
+                    step="any"
                   />
                 </div>
                 {discountAmtSynced > 0 && (
@@ -748,7 +748,7 @@ function InputField({ label, value, onChange }: { label: string; value: string; 
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="h-10 border border-outline rounded px-3 focus:border-tertiary outline-none text-sm font-sans"
-        step="0.01"
+        step="any"
       />
     </div>
   );

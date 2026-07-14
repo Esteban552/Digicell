@@ -19,6 +19,7 @@ export default function InventoryPanel({ products, onRefetchProducts, showToast 
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('');
   const [stock, setStock] = useState('');
+  const [cost, setCost] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [nameError, setNameError] = useState('');
   const [priceError, setPriceError] = useState('');
@@ -27,6 +28,7 @@ export default function InventoryPanel({ products, onRefetchProducts, showToast 
   const resetForm = () => {
     setName('');
     setPrice('');
+    setCost('');
     setCategory('');
     setStock('');
     setEditingId(null);
@@ -64,9 +66,11 @@ export default function InventoryPanel({ products, onRefetchProducts, showToast 
 
     if (hasError) return;
 
+    const parsedCost = cost ? Number(cost) : 0;
     const payload = {
       name: name.trim(),
       price: parsedPrice,
+      cost: isNaN(parsedCost) || parsedCost < 0 ? 0 : parsedCost,
       category: category.trim() || 'General',
       stock: parsedStock || 0,
     };
@@ -95,6 +99,7 @@ export default function InventoryPanel({ products, onRefetchProducts, showToast 
     setEditingId(p.id);
     setName(p.name);
     setPrice(String(p.price));
+    setCost(String(p.cost ?? 0));
     setCategory(p.category);
     setStock(String(p.stock));
   };
@@ -120,7 +125,7 @@ export default function InventoryPanel({ products, onRefetchProducts, showToast 
         <h3 className="text-sm font-bold font-sans text-on-surface mb-3">
           {editingId ? 'Editar Producto' : 'Agregar Producto'}
         </h3>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-bold font-sans text-on-surface-variant uppercase tracking-wider">Nombre</label>
             <input
@@ -146,11 +151,23 @@ export default function InventoryPanel({ products, onRefetchProducts, showToast 
                 setPriceError('');
               }}
               placeholder="$ 0.00"
-              step="0.01"
+              step="any"
               min="0.01"
               className={`h-9 border ${priceError ? 'border-error' : 'border-outline'} rounded px-3 focus:border-tertiary outline-none text-xs font-sans`}
             />
             {priceError && <p className="text-[10px] font-sans text-error font-semibold">{priceError}</p>}
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-bold font-sans text-on-surface-variant uppercase tracking-wider">Costo</label>
+            <input
+              type="number"
+              value={cost}
+              onChange={(e) => setCost(e.target.value)}
+              placeholder="$ 0.00"
+              step="any"
+              min="0"
+              className="h-9 border border-outline rounded px-3 focus:border-tertiary outline-none text-xs font-sans"
+            />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-bold font-sans text-on-surface-variant uppercase tracking-wider">Categoría</label>
@@ -217,6 +234,8 @@ export default function InventoryPanel({ products, onRefetchProducts, showToast 
                 <th className="text-left py-2.5 px-3 font-bold text-on-surface-variant uppercase tracking-wider text-[10px]">Nombre</th>
                 <th className="text-left py-2.5 px-3 font-bold text-on-surface-variant uppercase tracking-wider text-[10px]">Categoría</th>
                 <th className="text-right py-2.5 px-3 font-bold text-on-surface-variant uppercase tracking-wider text-[10px]">Precio</th>
+                <th className="text-right py-2.5 px-3 font-bold text-on-surface-variant uppercase tracking-wider text-[10px]">Costo</th>
+                <th className="text-right py-2.5 px-3 font-bold text-on-surface-variant uppercase tracking-wider text-[10px]">Margen</th>
                 <th className="text-right py-2.5 px-3 font-bold text-on-surface-variant uppercase tracking-wider text-[10px]">Stock</th>
                 <th className="text-right py-2.5 px-3 font-bold text-on-surface-variant uppercase tracking-wider text-[10px]">Acciones</th>
               </tr>
@@ -227,6 +246,12 @@ export default function InventoryPanel({ products, onRefetchProducts, showToast 
                   <td className="py-2.5 px-3 font-semibold text-on-surface">{p.name}</td>
                   <td className="py-2.5 px-3 text-on-surface-variant">{p.category}</td>
                   <td className="py-2.5 px-3 text-right font-semibold text-tertiary">${p.price.toFixed(2)}</td>
+                  <td className="py-2.5 px-3 text-right text-on-surface-variant">${(p.cost ?? 0).toFixed(2)}</td>
+                  <td className="py-2.5 px-3 text-right">
+                    <span className={`font-semibold ${(p.cost ?? 0) > 0 ? (p.price > p.cost ? 'text-success' : 'text-error') : 'text-on-surface-variant'}`}>
+                      {(p.cost ?? 0) > 0 ? `${((p.price - p.cost) / p.price * 100).toFixed(0)}%` : '—'}
+                    </span>
+                  </td>
                   <td className="py-2.5 px-3 text-right">
                     <span className={`font-semibold ${p.stock > 0 ? 'text-success' : 'text-error'}`}>
                       {p.stock}

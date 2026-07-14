@@ -85,9 +85,9 @@ describe('validateRepair', () => {
     expect(errs).not.toContain('Si hay costo, indicá el modelo del equipo.');
   });
 
-  it('rejects past deliveryDate', () => {
+  it('allows past deliveryDate', () => {
     const errs = validateRepair({ ...validOrder(), deliveryDate: '2020-01-01' });
-    expect(errs).toContain('La fecha de entrega no puede ser pasada.');
+    expect(errs).not.toContain('La fecha de entrega');
   });
 
   it('requires deliveryDate', () => {
@@ -108,5 +108,15 @@ describe('validateRepair', () => {
   it('requires problemReported', () => {
     const errs = validateRepair({ ...validOrder(), problemReported: '' });
     expect(errs).toContain('El detalle del problema es obligatorio.');
+  });
+
+  it('rejects delivery if remaining balance > 0', () => {
+    const errs = validateRepair({ ...validOrder(), status: 'delivered', totalCost: 500, advancePaid: 100, abonosPaid: 0 });
+    expect(errs).toContain('El saldo pendiente debe ser $0 para entregar la orden.');
+  });
+
+  it('allows delivery if remaining balance is 0', () => {
+    const errs = validateRepair({ ...validOrder(), status: 'delivered', totalCost: 500, advancePaid: 300, abonosPaid: 200 });
+    expect(errs).not.toContain('El saldo pendiente');
   });
 });

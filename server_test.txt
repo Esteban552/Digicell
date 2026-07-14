@@ -1,0 +1,5 @@
+
+  🔐 LogsDigicell Server corriendo en http://localhost:3001
+  📝 API: http://localhost:3001/api/logs
+  📊 Frontend: http://localhost:3001
+
