@@ -6,6 +6,7 @@ import DenominationPad from './DenominationPad';
 import { DENOMS, emptyCounts, calcTotal, calcChange } from '../lib/denominations';
 import type { DenomCounts } from '../lib/denominations';
 import { useConfirm } from '../hooks/useConfirm';
+import CancelSaleModal from './CancelSaleModal';
 
 function getCartQtyForProduct(cart: CartItem[], productId: number) {
   return cart
@@ -23,6 +24,8 @@ interface POSViewProps {
   onRefetchProducts: () => Promise<void>;
   taxRate: number;
   exchangeRate: number;
+  userName: string;
+  onRefundComplete?: () => void;
 }
 
 export default function POSView({
@@ -34,9 +37,12 @@ export default function POSView({
   products,
   taxRate,
   exchangeRate,
-  onRefetchProducts
+  onRefetchProducts,
+  userName,
+  onRefundComplete,
 }: POSViewProps) {
   const { confirm, ConfirmModal } = useConfirm();
+  const [cancelSaleOpen, setCancelSaleOpen] = useState(false);
   // Quick adder states
   const [itemName, setItemName] = useState('');
   const [itemQty, setItemQty] = useState(1);
@@ -571,6 +577,12 @@ export default function POSView({
                 >
                   Cobrar
                 </button>
+                <button
+                  onClick={() => setCancelSaleOpen(true)}
+                  className="h-10 px-3 border border-red-300 text-red-700 hover:bg-red-50 rounded-md text-xs font-bold font-sans outline-none cursor-pointer transition-all"
+                >
+                  Cancelar Venta
+                </button>
               </div>
             </div>
           </div>
@@ -734,6 +746,14 @@ export default function POSView({
           </div>
         </div>
       )}
+
+      <CancelSaleModal
+        open={cancelSaleOpen}
+        onClose={() => setCancelSaleOpen(false)}
+        userName={userName}
+        onRefundComplete={onRefundComplete ?? (() => {})}
+        showToast={showToast}
+      />
     </div>
     </>
   );

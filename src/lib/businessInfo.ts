@@ -7,8 +7,8 @@ export interface BusinessInfo {
 
 const DEFAULTS: BusinessInfo = {
   name: 'Digicell',
-  address: 'Av. Rodríguez 1234, San Luis Río Colorado, Sonora',
-  phone: '(653) 555-5555',
+  address: 'Avenida Revolución y calle 22',
+  phone: '653-534-6168',
   warrantyText:
     'Garantía de 30 días en piezas reemplazadas. No nos hacemos responsables por equipos olvidados después de 60 días.',
 };

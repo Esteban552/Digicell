@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { supabase } from "../lib/supabase";
+import { log } from "../lib/logging-client";
 
 export default function LoginView() {
   const [email, setEmail] = useState("");
@@ -29,6 +30,7 @@ export default function LoginView() {
       });
 
       if (error) {
+        log.loginFailed(email);
         setErrorMsg(
           error.message === "Invalid login credentials"
             ? "Credenciales inválidas. Verificá tu correo y contraseña."

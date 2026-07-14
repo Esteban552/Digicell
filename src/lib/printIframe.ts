@@ -78,18 +78,20 @@ export function receiptPage(contentHTML: string, biz: { name: string; address?: 
   }
   .cnt { text-align: center; }
   .b { font-weight: 700; }
-  .label { color: #888; font-size: 8pt; }
-  .s9  { font-size: 9.5pt; }
-  .s10 { font-size: 10.5pt; }
-  .s11 { font-size: 11.5pt; }
-  .s13 { font-size: 13.5pt; }
+  .label { color: #888; font-size: 9pt; }
+  .s9  { font-size: 10pt; }
+  .s10 { font-size: 11pt; }
+  .s11 { font-size: 12pt; }
+  .s13 { font-size: 14pt; }
 
   .section { margin: 3mm 0; }
   .divider { border: 0; border-top: 1px solid #bbb; margin: 2.5mm 0; }
   .divider-light { border: 0; border-top: 1px solid #ddd; margin: 2mm 0; }
+  .divider-double { border: 0; border-top: 3px double #888; margin: 2.5mm 0; }
+  .solid-bottom { border-bottom: 1px solid #000; }
 
   .hdr {
-    font-size: 7.5pt; font-weight: 700;
+    font-size: 8.5pt; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.8px;
     color: #888; margin-bottom: 1.5mm;
   }
@@ -97,26 +99,24 @@ export function receiptPage(contentHTML: string, biz: { name: string; address?: 
   .row { display: flex; justify-content: space-between; align-items: baseline; }
   .row + .row { margin-top: 0.8mm; }
 
-  table { width: 100%; border-collapse: collapse; font-size: 9pt; }
-  th, td { padding: 0.8mm 0; text-align: left; vertical-align: top; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+  th, td { padding: 1mm 0; text-align: left; vertical-align: top; }
   th {
-    font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
-    color: #888; border-bottom: 1px solid #ddd; padding-bottom: 1.2mm;
+    font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    color: #888; border-bottom: 1px solid #bbb; padding-bottom: 1.2mm;
   }
-  td { border-bottom: 1px solid #eee; }
+  td { border-bottom: 1px solid #ddd; }
   tr:last-child td { border-bottom: none; }
+  tr + tr td { border-top: 1px solid #eee; }
   .amt { text-align: right; white-space: nowrap; }
 </style>
 </head>
 <body>
 
 <div class="cnt" style="margin-bottom: 1.5mm">
-  <div style="font-size: 14pt; font-weight: 700; letter-spacing: 0.3px; line-height: 1.3;">${biz.name}</div>
-  <div style="font-size: 8pt; color: #888; margin-top: 0.5mm; line-height: 1.4;">
-    ${biz.address ?? ''}${biz.address ? '<br>' : ''}Tel: ${biz.phone ?? '—'}
-  </div>
+  <img src="/LogoDigicell.png" alt="${biz.name}" style="width: 36mm; height: auto; display: block; margin: 0 auto 0.5mm;" />
 </div>
-<hr class="divider">
+<hr class="divider-double">
 
 ${contentHTML}
 </body>
@@ -166,8 +166,8 @@ export function receiptHTML(d: POSTicketData, info: BusinessInfo) {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    font-size: 9.5pt; line-height: 1.6;
-    width: 72mm; margin: 4mm auto;
+    font-size: 9.5pt; line-height: 1.35;
+    width: 72mm; margin: 3mm auto;
     color: #000; background: #fff;
     font-weight: 500;
     print-color-adjust: exact;
@@ -175,29 +175,30 @@ export function receiptHTML(d: POSTicketData, info: BusinessInfo) {
   }
   .cnt { text-align: center; }
   .b { font-weight: 700; }
-  .label { color: #888; font-size: 8pt; }
+  .label { color: #888; font-size: 8.5pt; }
 
-  .divider { border: 0; border-top: 1px solid #bbb; margin: 2.5mm 0; }
-  .divider-light { border: 0; border-top: 1px solid #ddd; margin: 2mm 0; }
-  .section { margin: 2.5mm 0; }
+  .divider { border: 0; border-top: 1px solid #bbb; margin: 1.5mm 0; }
+  .divider-light { border: 0; border-top: 1px solid #ddd; margin: 1.2mm 0; }
+  .divider-double { border: 0; border-top: 3px double #888; margin: 1.5mm 0; }
+  .section { margin: 1.5mm 0; }
 
   .row { display: flex; justify-content: space-between; align-items: baseline; }
-  .row + .row { margin-top: 0.8mm; }
+  .row + .row { margin-top: 0.5mm; }
   .row-total { display: flex; justify-content: space-between; align-items: baseline; font-size: 12pt; font-weight: 700; }
   .row-change { display: flex; justify-content: space-between; align-items: baseline; font-size: 11pt; font-weight: 700; color: #222; }
 </style>
 </head>
 <body>
 
-<div class="cnt" style="margin-bottom: 1.5mm">
-  <div style="font-size: 14pt; font-weight: 700; letter-spacing: 0.3px; line-height: 1.3;">${info.name}</div>
-  <div style="font-size: 8pt; color: #888; margin-top: 0.5mm; line-height: 1.4;">
+<div class="cnt" style="margin-bottom: 1mm">
+  <img src="/LogoDigicell.png" alt="${info.name}" style="width: 36mm; height: auto; display: block; margin: 0 auto 0.5mm;" />
+  <div style="font-size: 8pt; color: #888; margin-top: 0.3mm; line-height: 1.3;">
     ${info.address}<br>Tel: ${info.phone}
   </div>
 </div>
-<hr class="divider">
+<hr class="divider-double">
 
-<div class="section" style="font-size: 9pt; line-height: 1.7;">
+<div class="section" style="font-size: 9pt; line-height: 1.4;">
   <span style="font-weight: 600;">Ticket #</span>${d.saleId}<br>
   <span style="font-weight: 600;">Fecha:</span> ${dateStr}<br>
   <span style="font-weight: 600;">Atendió:</span> ${d.attendant}
@@ -217,7 +218,7 @@ export function receiptHTML(d: POSTicketData, info: BusinessInfo) {
   <div class="row"><span>IVA (${d.taxRate}%)</span><span>$${d.tax.toFixed(2)}</span></div>
 </div>
 
-<hr class="divider">
+<hr class="divider-double">
 
 <div class="row-total">
   <span>TOTAL</span>
@@ -228,15 +229,15 @@ export function receiptHTML(d: POSTicketData, info: BusinessInfo) {
 
 <div class="section" style="font-size: 9.5pt;">
   ${payments.map((p) => `<div class="row"><span>${p}</span></div>`).join('')}
-  <div class="row-change" style="margin-top: 1.5mm; padding-top: 1.5mm; border-top: 1px solid #ddd;">
+  <div class="row-change" style="margin-top: 1mm; padding-top: 1mm; border-top: 1px solid #ddd;">
     <span>Cambio</span>
     <span>$${d.change.toFixed(2)}</span>
   </div>
 </div>
 
-<hr class="divider">
+<hr class="divider-double">
 
-<div class="cnt label" style="margin-top: 2mm;">
+<div class="cnt label" style="margin-top: 1.5mm;">
   ¡Gracias por su compra!
 </div>
 
@@ -287,6 +288,7 @@ export function repairReceiptHTML(repair: RepairOrder, remaining: number, info: 
 
   .divider { border: 0; border-top: 1px solid #bbb; margin: 2.5mm 0; }
   .divider-light { border: 0; border-top: 1px solid #ddd; margin: 2mm 0; }
+  .divider-double { border: 0; border-top: 3px double #888; margin: 2.5mm 0; }
   .section { margin: 2.5mm 0; }
 
   .row { display: flex; justify-content: space-between; align-items: baseline; }
@@ -305,13 +307,13 @@ export function repairReceiptHTML(repair: RepairOrder, remaining: number, info: 
 </head>
 <body>
 
-<div class="cnt" style="margin-bottom: 1.5mm">
-  <div style="font-size: 14pt; font-weight: 700; letter-spacing: 0.3px; line-height: 1.3;">${info.name}</div>
-  <div style="font-size: 8pt; color: #888; margin-top: 0.5mm; line-height: 1.4;">
+<div class="cnt" style="margin-bottom: 1mm">
+  <img src="/LogoDigicell.png" alt="${info.name}" style="width: 36mm; height: auto; display: block; margin: 0 auto 0.5mm;" />
+  <div style="font-size: 8pt; color: #888; margin-top: 0.3mm; line-height: 1.3;">
     ${info.address}<br>Tel: ${info.phone}
   </div>
 </div>
-<hr class="divider">
+<hr class="divider-double">
 
 <div class="section info-grid">
   <strong>Folio:</strong> #${repair.id}<br>
@@ -344,7 +346,7 @@ export function repairReceiptHTML(repair: RepairOrder, remaining: number, info: 
   ${repair.abonosPaid > 0 ? `<div class="row"><span>Abonos</span><span>$${repair.abonosPaid.toFixed(2)}</span></div>` : ''}
 </div>
 
-<hr class="divider">
+<hr class="divider-double">
 
 <div class="row-total">
   <span>SALDO PENDIENTE</span>
@@ -358,7 +360,7 @@ ${repair.deliveryDate ? `
   ${repair.warrantyEnd ? `<br><strong>Garantía hasta:</strong> ${new Date(repair.warrantyEnd).toLocaleDateString('es-MX')}` : ''}
 </div>` : ''}
 
-<hr class="divider">
+<hr class="divider-double">
 
 <div class="cnt label" style="margin-top: 1mm;">
   ${repair.footnote || info.warrantyText}

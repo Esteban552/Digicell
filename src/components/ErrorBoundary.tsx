@@ -1,4 +1,5 @@
 import React, { ReactNode } from 'react';
+import { log } from '../lib/logging-client';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -21,6 +22,10 @@ export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, E
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[ErrorBoundary]', error, info.componentStack);
+    log.error(error.message, {
+      componentStack: info.componentStack,
+      name: error.name,
+    });
   }
 
   render() {

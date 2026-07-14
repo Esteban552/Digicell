@@ -23,13 +23,15 @@ const typeLabels: Record<string, string> = {
   'POS Sale': 'Venta POS',
   'Repair Advance': 'Anticipo de Reparación',
   'Cash Movement': 'Movimiento de Caja',
-  'Repair Payment': 'Pago de Reparación'
+  'Repair Payment': 'Pago de Reparación',
+  'Refund': 'Reembolso',
 };
 
 const statusLabels: Record<string, string> = {
   'Paid': 'Pagado',
   'Advance': 'Anticipo',
-  'Outflow': 'Salida'
+  'Outflow': 'Salida',
+  'Refund': 'Reembolso',
 };
 
 type TypeFilter = 'all' | 'sales' | 'advances' | 'cash';
@@ -106,7 +108,8 @@ export default function ReportsView({
     const movements = dateFilteredLogs.filter(l => l.type === 'Cash Movement');
     const cashIn = movements.filter(l => l.amount > 0).reduce((a, c) => a + c.amount, 0);
     const cashOut = movements.filter(l => l.amount < 0).reduce((a, c) => a + Math.abs(c.amount), 0);
-    return { sales, advances, payments, cashIn, cashOut };
+    const refunds = dateFilteredLogs.filter(l => l.type === 'Refund').reduce((a, c) => a + c.amount, 0);
+    return { sales, advances, payments, cashIn, cashOut, refunds };
   }, [dateFilteredLogs]);
 
   const repairCounts = useMemo(() => {
@@ -124,12 +127,14 @@ export default function ReportsView({
     'Repair Advance': 'Anticipo de Reparación',
     'Cash Movement': 'Movimiento de Caja',
     'Repair Payment': 'Pago de Reparación',
+    'Refund': 'Reembolso',
   };
 
   const statusPrintLabels: Record<string, string> = {
     'Paid': 'Pagado',
     'Advance': 'Anticipo',
     'Outflow': 'Salida',
+    'Refund': 'Reembolso',
   };
 
   const buildCorteHTML = useCallback(() => {
@@ -138,7 +143,6 @@ export default function ReportsView({
       .map(
         (log) => `
     <tr>
-      <td>${log.created_at ? new Date(log.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Tijuana' }) : log.time}</td>
       <td>${typePrintLabels[log.type] || log.type}</td>
       <td style="max-width:50mm;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${log.description}</td>
       <td class="amt">${log.amount < 0 ? '' : '+'}$${log.amount.toFixed(2)}</td>
@@ -147,13 +151,14 @@ export default function ReportsView({
       )
       .join('');
 
-    const flow = todayStats.sales + todayStats.advances + todayStats.payments - todayStats.cashOut;
+    const flow = todayStats.sales + todayStats.advances + todayStats.payments + todayStats.cashIn - todayStats.cashOut + todayStats.refunds;
 
     const content = `
 <div class="cnt s11 b solid-bottom">CORTE DEL DÍA</div>
-<div class="s9 cnt" style="margin-bottom:3mm">
+<div class="s9 cnt" style="margin-bottom:2mm">
   ${new Date(selectedDate).toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
 </div>
+<hr class="divider-light">
 
 <div class="solid s10">
   <div class="row"><span>Ventas POS</span><span>$${todayStats.sales.toFixed(2)}</span></div>
@@ -161,14 +166,15 @@ export default function ReportsView({
   <div class="row"><span>Pagos Reparación</span><span>$${todayStats.payments.toFixed(2)}</span></div>
   <div class="row"><span>Entradas Caja</span><span>+$${todayStats.cashIn.toFixed(2)}</span></div>
   <div class="row"><span>Salidas Caja</span><span>-$${todayStats.cashOut.toFixed(2)}</span></div>
+  ${todayStats.refunds < 0 ? `<div class="row" style="color:#c00"><span>Reembolsos</span><span>${todayStats.refunds.toFixed(2)}</span></div>` : ''}
   <div class="solid" style="margin-top:1mm"></div>
-  <div class="row b s11"><span>FLUJO NETO</span><span>$${flow.toFixed(2)}</span></div>
+  <div class="row b s11"><span>TOTAL DEL DÍA</span><span>$${flow.toFixed(2)}</span></div>
 </div>
 
 <div class="solid s9" style="margin-top:3mm">
   <div class="b s10" style="margin-bottom:1mm">Detalle de Transacciones</div>
   <table>
-    <thead><tr><th>Hora</th><th>Tipo</th><th>Descripción</th><th class="amt">Monto</th><th class="amt">Estado</th></tr></thead>
+    <thead><tr><th>Tipo</th><th>Descripción</th><th class="amt">Monto</th><th class="amt">Estado</th></tr></thead>
     <tbody>${entriesHTML}</tbody>
   </table>
 </div>
@@ -349,7 +355,7 @@ export default function ReportsView({
           <h3 className="text-[11px] font-bold text-red-200 uppercase tracking-wider mb-2">Flujo del Día {selectedDate}</h3>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold font-sans text-[#ffffff]">
-              ${(todayStats.sales + todayStats.advances + todayStats.payments - todayStats.cashOut).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${(todayStats.sales + todayStats.advances + todayStats.payments + todayStats.cashIn - todayStats.cashOut + todayStats.refunds).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
           <p className="text-xs font-sans text-red-300 mt-1 font-semibold">
@@ -453,14 +459,16 @@ export default function ReportsView({
                         log.type === 'POS Sale' ? 'text-emerald-500' :
                         log.type === 'Repair Advance' || log.type === 'Repair Payment' ? 'text-blue-500' :
                         log.type === 'Cash Movement' ? 'text-rose-500' :
+                        log.type === 'Refund' ? 'text-red-600' :
                         'text-indigo-500'
                       }`}>
                         {
                           log.type === 'POS Sale' ? 'point_of_sale' :
                           log.type === 'Repair Advance' ? 'build' :
-                          log.type === 'Repair Payment' ? 'payments' :
-                          log.type === 'Cash Movement' ? 'swap_horiz' :
-                          'receipt'
+                        log.type === 'Repair Payment' ? 'payments' :
+                        log.type === 'Cash Movement' ? 'swap_horiz' :
+                        log.type === 'Refund' ? 'undo' :
+                        'receipt'
                         }
                       </span>
                       {typeLabels[log.type] || log.type}

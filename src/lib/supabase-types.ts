@@ -41,6 +41,11 @@ export interface Database {
         Insert: Omit<Arqueo, 'id' | 'created_at'>;
         Update: Partial<Omit<Arqueo, 'id'>>;
       };
+      refunds: {
+        Row: Refund;
+        Insert: Omit<Refund, 'id' | 'created_at'>;
+        Update: Partial<Omit<Refund, 'id'>>;
+      };
     };
     Views: {
       activity_logs: {
@@ -100,7 +105,18 @@ export interface RepairOrder {
   footnote: string;
   created_by: string | null;
   created_at: string;
-  updated_at: string;
+}
+
+export interface Refund {
+  id: string;
+  sale_id: number;
+  total: number;
+  cash_amount: number;
+  card_amount: number;
+  usd_amount: number;
+  reason: string;
+  cancelled_by: string | null;
+  created_at: string;
 }
 
 export interface Product {

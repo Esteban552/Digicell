@@ -23,6 +23,7 @@ import { INITIAL_CART } from './data';
 import { supabase } from './lib/supabase';
 import { getBusinessInfo } from './lib/businessInfo';
 
+import { log } from './lib/logging-client';
 import { useCashMovements } from './hooks/useCashMovements';
 import { useActivityLogs } from './hooks/useActivityLogs';
 import { useSettings } from './hooks/useSettings';
@@ -71,12 +72,19 @@ export default function App() {
         }
       });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      setSession(s);
       // Only navigate on explicit sign-out. SIGNED_IN from tab reconnect does NOT reset view.
       // TOKEN_REFRESHED (fires when tab regains focus) is completely ignored for navigation.
-      if (event === 'SIGNED_OUT') setCurrentView('login');
-      if (event === 'SIGNED_IN' && session) setCurrentView(prev => prev === 'login' ? 'dashboard' : prev);
+      if (event === 'SIGNED_OUT') {
+        setCurrentView('login');
+        log.logout(userName, userId || '');
+      }
+      if (event === 'SIGNED_IN' && s) {
+        const name = s?.user?.user_metadata?.display_name ?? s?.user?.email?.split('@')[0] ?? 'Invitado';
+        log.loginSuccess(name, s.user.id);
+        setCurrentView(prev => prev === 'login' ? 'dashboard' : prev);
+      }
     });
 
     return () => {
@@ -108,6 +116,17 @@ export default function App() {
       setCurrentView('dashboard');
     }
   }, [currentView, userRole, session, authLoading, profileLoading]);
+
+  // Log visitas a cada vista
+  useEffect(() => {
+    if (!session || currentView === 'login') return;
+    log.event('app.visit', {
+      user: userName,
+      user_id: userId || '',
+      path: `/${currentView}`,
+      details: { view: currentView },
+    });
+  }, [currentView, session]);
 
   // Toast notifications
   const { toastMessage, showToast, setToastMessage } = useToast();
@@ -255,6 +274,15 @@ export default function App() {
 
     showToast('Venta Exitosa', `Venta procesada correctamente por $${totalCost.toFixed(2)}.`, 'success');
 
+    log.saleCreated(userName, userId || '', {
+      sale_id: sale.id,
+      total: totalCost,
+      items: cart.length,
+      cash,
+      card,
+      usd,
+    });
+
     const exchangeRate = settings.exchange_rate !== undefined ? parseFloat(settings.exchange_rate) : 18.50;
     const usdValue = usd * exchangeRate;
     const change = (cash + card + usdValue) - totalCost;
@@ -379,6 +407,8 @@ export default function App() {
                 onRefetchProducts={refetchProducts}
                 taxRate={settings.tax_rate !== undefined ? parseFloat(settings.tax_rate) : 16}
                 exchangeRate={settings.exchange_rate !== undefined ? parseFloat(settings.exchange_rate) : 18.50}
+                userName={userName}
+                onRefundComplete={() => { refetchLogs(); refetchCashMovements(); }}
               />
             )}
 
