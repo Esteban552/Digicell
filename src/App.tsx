@@ -3,20 +3,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
-import LoginView from './components/LoginView';
-import DashboardView from './components/DashboardView';
-import POSView from './components/POSView';
-import RepairsView from './components/RepairsView';
-import ReportsView from './components/ReportsView';
-import SettingsView from './components/SettingsView';
-import ArqueoCaja from './components/ArqueoCaja';
 import ErrorBoundary from './components/ErrorBoundary';
 import Toast from './components/Toast';
+
+// Lazy-loaded views — each loads only when the user navigates there
+const LoginView = lazy(() => import('./components/LoginView'));
+const DashboardView = lazy(() => import('./components/DashboardView'));
+const POSView = lazy(() => import('./components/POSView'));
+const RepairsView = lazy(() => import('./components/RepairsView'));
+const ReportsView = lazy(() => import('./components/ReportsView'));
+const SettingsView = lazy(() => import('./components/SettingsView'));
+const ArqueoCaja = lazy(() => import('./components/ArqueoCaja'));
 import { printHTML, receiptHTML } from './lib/printIframe';
 
 import { INITIAL_CART } from './data';
@@ -383,10 +385,14 @@ export default function App() {
               </div>
             ) : (
               <>
-
-            {currentView === 'login' && <LoginView />}
+            {currentView === 'login' && (
+              <Suspense fallback={null}>
+                <LoginView />
+              </Suspense>
+            )}
 
             {currentView === 'dashboard' && (
+              <Suspense fallback={null}>
               <DashboardView
                 onViewChange={setCurrentView}
                 onLogout={handleLogout}
@@ -394,9 +400,11 @@ export default function App() {
                 inProgressCount={dashboardBentoStats.inProgress}
                 userName={userName}
               />
+              </Suspense>
             )}
 
             {currentView === 'pos' && (
+              <Suspense fallback={null}>
               <POSView
                 cart={cart}
                 onSetCart={setCart}
@@ -410,9 +418,11 @@ export default function App() {
                 userName={userName}
                 onRefundComplete={() => { refetchLogs(); refetchCashMovements(); }}
               />
+              </Suspense>
             )}
 
             {currentView === 'repairs' && (
+              <Suspense fallback={null}>
               <RepairsView
                 repairs={repairEditor.repairs}
                 selectedId={repairEditor.selectedRepairId}
@@ -436,9 +446,11 @@ export default function App() {
                 onSetPrintModalOpen={setPrintModalOpen}
                 onReprint={handleReprint}
               />
+              </Suspense>
             )}
 
             {currentView === 'reports' && (
+              <Suspense fallback={null}>
               <ReportsView
                 logs={logs}
                 repairs={repairEditor.repairs}
@@ -446,9 +458,11 @@ export default function App() {
                 totalAdvancesSum={calculatedStats.totalAdvances}
                 showToast={showToast}
               />
+              </Suspense>
             )}
 
             {currentView === 'arqueo' && (
+              <Suspense fallback={null}>
               <ArqueoCaja
                 movements={cashMovements}
                 startingFund={startingFund}
@@ -456,10 +470,13 @@ export default function App() {
                 onSave={saveArqueo}
                 onRefetchArqueos={refetchArqueos}
               />
+              </Suspense>
             )}
 
             {currentView === 'settings' && (
+              <Suspense fallback={null}>
               <SettingsView user={userName} showToast={showToast} settings={settings} updateSetting={updateSetting} userRole={userRole} />
+              </Suspense>
             )}
 
               </>
