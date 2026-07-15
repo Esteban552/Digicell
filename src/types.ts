@@ -45,10 +45,10 @@ export interface CartItem {
 export interface LogEntry {
   id: string;
   time: string;
-  type: 'Repair Advance' | 'POS Sale' | 'Cash Movement' | 'Repair Payment';
+  type: 'Repair Advance' | 'POS Sale' | 'Cash Movement' | 'Repair Payment' | 'Refund';
   description: string;
   amount: number;
-  status: 'Advance' | 'Paid' | 'Outflow';
+  status: 'Advance' | 'Paid' | 'Outflow' | 'Refund';
   created_at?: string;
 }
 
